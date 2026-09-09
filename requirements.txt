@@ -1,0 +1,4 @@
+# Minimal initial dependencies for Hiver Support Agent project
+# Core dependencies will be specified per phase requirement
+
+pytest>=7.0.0
