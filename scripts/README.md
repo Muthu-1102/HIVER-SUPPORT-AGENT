@@ -14,6 +14,12 @@ Second-stage candidate analysis:
 python scripts/analyze_brand_candidates.py
 ```
 
+SpotifyCares conversation reconstruction:
+
+```powershell
+python scripts/reconstruct_spotify_conversations.py
+```
+
 The second-stage analysis streams `data/raw/twcs.csv` twice and uses temporary,
 deleted SQLite indexes. It writes `data/processed/brand_candidate_analysis.csv`
 and `docs/brand_candidate_analysis.md`.
