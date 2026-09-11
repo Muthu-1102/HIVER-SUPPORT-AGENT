@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 import sys
-sys.path.insert(0,str(Path(__file__).parents[1]/"scripts"))
+sys.path.insert(0,str(Path(__file__).parents[1]))
 from scripts.reconstruct_spotify_conversations import reconstruct
 
 HEADER="tweet_id,author_id,inbound,created_at,text,response_tweet_id,in_response_to_tweet_id\n"
