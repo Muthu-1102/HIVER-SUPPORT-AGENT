@@ -1,0 +1,251 @@
+{
+  "confusion_matrix": {
+    "01_catalog_content_gap": {
+      "01_catalog_content_gap": 21,
+      "02_catalog_metadata_error": 0,
+      "03_region_availability": 0,
+      "04_billing_payment": 0,
+      "05_subscription_plan_management": 0,
+      "06_login_authentication": 0,
+      "07_technical_malfunction": 0,
+      "08_feature_request": 0,
+      "09_artist_rights_holder_mgmt": 0,
+      "insufficient_information": 0,
+      "no_action_acknowledgment_only": 0,
+      "out_of_scope_non_support": 0
+    },
+    "02_catalog_metadata_error": {
+      "01_catalog_content_gap": 0,
+      "02_catalog_metadata_error": 6,
+      "03_region_availability": 0,
+      "04_billing_payment": 0,
+      "05_subscription_plan_management": 0,
+      "06_login_authentication": 0,
+      "07_technical_malfunction": 0,
+      "08_feature_request": 0,
+      "09_artist_rights_holder_mgmt": 0,
+      "insufficient_information": 0,
+      "no_action_acknowledgment_only": 0,
+      "out_of_scope_non_support": 0
+    },
+    "03_region_availability": {
+      "01_catalog_content_gap": 0,
+      "02_catalog_metadata_error": 0,
+      "03_region_availability": 8,
+      "04_billing_payment": 0,
+      "05_subscription_plan_management": 0,
+      "06_login_authentication": 0,
+      "07_technical_malfunction": 0,
+      "08_feature_request": 0,
+      "09_artist_rights_holder_mgmt": 0,
+      "insufficient_information": 0,
+      "no_action_acknowledgment_only": 0,
+      "out_of_scope_non_support": 0
+    },
+    "04_billing_payment": {
+      "01_catalog_content_gap": 0,
+      "02_catalog_metadata_error": 0,
+      "03_region_availability": 0,
+      "04_billing_payment": 34,
+      "05_subscription_plan_management": 0,
+      "06_login_authentication": 0,
+      "07_technical_malfunction": 0,
+      "08_feature_request": 0,
+      "09_artist_rights_holder_mgmt": 0,
+      "insufficient_information": 0,
+      "no_action_acknowledgment_only": 0,
+      "out_of_scope_non_support": 0
+    },
+    "05_subscription_plan_management": {
+      "01_catalog_content_gap": 0,
+      "02_catalog_metadata_error": 0,
+      "03_region_availability": 0,
+      "04_billing_payment": 0,
+      "05_subscription_plan_management": 17,
+      "06_login_authentication": 0,
+      "07_technical_malfunction": 0,
+      "08_feature_request": 0,
+      "09_artist_rights_holder_mgmt": 0,
+      "insufficient_information": 0,
+      "no_action_acknowledgment_only": 0,
+      "out_of_scope_non_support": 0
+    },
+    "06_login_authentication": {
+      "01_catalog_content_gap": 0,
+      "02_catalog_metadata_error": 0,
+      "03_region_availability": 0,
+      "04_billing_payment": 0,
+      "05_subscription_plan_management": 0,
+      "06_login_authentication": 29,
+      "07_technical_malfunction": 0,
+      "08_feature_request": 0,
+      "09_artist_rights_holder_mgmt": 0,
+      "insufficient_information": 0,
+      "no_action_acknowledgment_only": 0,
+      "out_of_scope_non_support": 0
+    },
+    "07_technical_malfunction": {
+      "01_catalog_content_gap": 0,
+      "02_catalog_metadata_error": 0,
+      "03_region_availability": 0,
+      "04_billing_payment": 0,
+      "05_subscription_plan_management": 0,
+      "06_login_authentication": 0,
+      "07_technical_malfunction": 35,
+      "08_feature_request": 0,
+      "09_artist_rights_holder_mgmt": 0,
+      "insufficient_information": 0,
+      "no_action_acknowledgment_only": 0,
+      "out_of_scope_non_support": 0
+    },
+    "08_feature_request": {
+      "01_catalog_content_gap": 0,
+      "02_catalog_metadata_error": 0,
+      "03_region_availability": 0,
+      "04_billing_payment": 0,
+      "05_subscription_plan_management": 0,
+      "06_login_authentication": 0,
+      "07_technical_malfunction": 0,
+      "08_feature_request": 26,
+      "09_artist_rights_holder_mgmt": 0,
+      "insufficient_information": 0,
+      "no_action_acknowledgment_only": 0,
+      "out_of_scope_non_support": 0
+    },
+    "09_artist_rights_holder_mgmt": {
+      "01_catalog_content_gap": 0,
+      "02_catalog_metadata_error": 0,
+      "03_region_availability": 0,
+      "04_billing_payment": 0,
+      "05_subscription_plan_management": 0,
+      "06_login_authentication": 0,
+      "07_technical_malfunction": 0,
+      "08_feature_request": 0,
+      "09_artist_rights_holder_mgmt": 12,
+      "insufficient_information": 0,
+      "no_action_acknowledgment_only": 0,
+      "out_of_scope_non_support": 0
+    },
+    "insufficient_information": {
+      "01_catalog_content_gap": 0,
+      "02_catalog_metadata_error": 0,
+      "03_region_availability": 0,
+      "04_billing_payment": 0,
+      "05_subscription_plan_management": 0,
+      "06_login_authentication": 0,
+      "07_technical_malfunction": 0,
+      "08_feature_request": 0,
+      "09_artist_rights_holder_mgmt": 0,
+      "insufficient_information": 0,
+      "no_action_acknowledgment_only": 0,
+      "out_of_scope_non_support": 0
+    },
+    "no_action_acknowledgment_only": {
+      "01_catalog_content_gap": 0,
+      "02_catalog_metadata_error": 0,
+      "03_region_availability": 0,
+      "04_billing_payment": 0,
+      "05_subscription_plan_management": 0,
+      "06_login_authentication": 0,
+      "07_technical_malfunction": 0,
+      "08_feature_request": 0,
+      "09_artist_rights_holder_mgmt": 0,
+      "insufficient_information": 0,
+      "no_action_acknowledgment_only": 0,
+      "out_of_scope_non_support": 0
+    },
+    "out_of_scope_non_support": {
+      "01_catalog_content_gap": 0,
+      "02_catalog_metadata_error": 0,
+      "03_region_availability": 0,
+      "04_billing_payment": 0,
+      "05_subscription_plan_management": 0,
+      "06_login_authentication": 0,
+      "07_technical_malfunction": 0,
+      "08_feature_request": 0,
+      "09_artist_rights_holder_mgmt": 0,
+      "insufficient_information": 0,
+      "no_action_acknowledgment_only": 0,
+      "out_of_scope_non_support": 0
+    }
+  },
+  "evaluation_dataset": "SpotifyCares Golden Evaluation Set (200 records)",
+  "metrics": {
+    "cross_cutting_flags_accuracy": 0.89,
+    "cross_cutting_flags_correct": 178,
+    "full_record_exact_match_accuracy": 0.735,
+    "full_record_exact_match_correct": 147,
+    "non_intent_accuracy": 1.0,
+    "non_intent_correct": 200,
+    "primary_intent_accuracy": 1.0,
+    "primary_intent_correct": 200,
+    "secondary_intents_accuracy": 0.875,
+    "secondary_intents_correct": 175,
+    "technical_scope_accuracy": 0.915,
+    "technical_scope_correct": 183,
+    "total_errors": 53,
+    "total_records": 200
+  },
+  "per_intent_metrics": {
+    "01_catalog_content_gap": {
+      "correct_count": 21,
+      "gold_count": 21,
+      "predicted_count": 21
+    },
+    "02_catalog_metadata_error": {
+      "correct_count": 6,
+      "gold_count": 6,
+      "predicted_count": 6
+    },
+    "03_region_availability": {
+      "correct_count": 8,
+      "gold_count": 8,
+      "predicted_count": 8
+    },
+    "04_billing_payment": {
+      "correct_count": 34,
+      "gold_count": 34,
+      "predicted_count": 34
+    },
+    "05_subscription_plan_management": {
+      "correct_count": 17,
+      "gold_count": 17,
+      "predicted_count": 17
+    },
+    "06_login_authentication": {
+      "correct_count": 29,
+      "gold_count": 29,
+      "predicted_count": 29
+    },
+    "07_technical_malfunction": {
+      "correct_count": 35,
+      "gold_count": 35,
+      "predicted_count": 35
+    },
+    "08_feature_request": {
+      "correct_count": 26,
+      "gold_count": 26,
+      "predicted_count": 26
+    },
+    "09_artist_rights_holder_mgmt": {
+      "correct_count": 12,
+      "gold_count": 12,
+      "predicted_count": 12
+    },
+    "insufficient_information": {
+      "correct_count": 0,
+      "gold_count": 0,
+      "predicted_count": 0
+    },
+    "no_action_acknowledgment_only": {
+      "correct_count": 0,
+      "gold_count": 0,
+      "predicted_count": 0
+    },
+    "out_of_scope_non_support": {
+      "correct_count": 0,
+      "gold_count": 0,
+      "predicted_count": 0
+    }
+  }
+}
