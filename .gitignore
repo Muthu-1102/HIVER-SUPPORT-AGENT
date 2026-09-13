@@ -28,7 +28,8 @@ ENV/
 
 # Data & Models
 data/raw/
-data/processed/
+data/processed/*
+!data/processed/golden_set_exclusions.txt
 *.csv
 *.jsonl
 *.parquet

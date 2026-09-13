@@ -1,0 +1,31 @@
+# Golden Evaluation Set Exclusion List
+# Contains conversation thread IDs referenced/discussed in taxonomy-design work
+# These must NOT be included in candidate sampling
+spotify_root_1151701
+spotify_root_2572208
+spotify_root_538058
+spotify_root_987852
+spotify_root_1304304
+spotify_root_1524424
+spotify_root_870501
+spotify_root_1780757
+spotify_root_2056897
+spotify_root_2915264
+spotify_root_1923604
+spotify_root_2142856
+spotify_root_371972
+spotify_root_2615422
+spotify_root_2201059
+spotify_root_2502222
+spotify_root_1863968
+spotify_root_429646
+spotify_root_1074365
+spotify_root_585142
+spotify_root_2766502
+spotify_root_1736613
+spotify_root_412340
+spotify_root_392711
+spotify_root_1962132
+spotify_root_429226
+spotify_root_784880
+spotify_root_904057
