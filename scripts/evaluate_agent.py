@@ -73,6 +73,7 @@ def evaluate_agent(
     scope_correct = 0
     flags_correct = 0
     non_intent_correct = 0
+    non_intent_total = 0
     full_exact_match = 0
 
     # Initialize confusion matrix for primary intent
@@ -140,8 +141,10 @@ def evaluate_agent(
             scope_correct += 1
         if match_flags:
             flags_correct += 1
-        if match_non_intent:
-            non_intent_correct += 1
+        if gold_is_non_intent:
+            non_intent_total += 1
+            if match_non_intent:
+                non_intent_correct += 1
 
         is_full_match = (
             match_primary
@@ -218,8 +221,9 @@ def evaluate_agent(
         "technical_scope_correct": scope_correct,
         "cross_cutting_flags_accuracy": round(flags_correct / total, 4) if total else 0.0,
         "cross_cutting_flags_correct": flags_correct,
-        "non_intent_accuracy": round(non_intent_correct / total, 4) if total else 0.0,
+        "non_intent_accuracy": round(non_intent_correct / non_intent_total, 4) if non_intent_total else None,
         "non_intent_correct": non_intent_correct,
+        "non_intent_total": non_intent_total,
         "full_record_exact_match_accuracy": round(full_exact_match / total, 4) if total else 0.0,
         "full_record_exact_match_correct": full_exact_match,
         "total_errors": len(error_analysis_records),
@@ -252,6 +256,7 @@ def print_evaluation_summary(report_data: dict[str, Any]) -> None:
     """Print a clean CLI summary of evaluation results."""
     metrics = report_data["metrics"]
     total = metrics["total_records"]
+    non_intent_total = metrics.get("non_intent_total", 0)
 
     print("=" * 80)
     print("SPOTIFY SUPPORT AGENT — GOLDEN EVALUATION RESULTS")
@@ -261,7 +266,10 @@ def print_evaluation_summary(report_data: dict[str, Any]) -> None:
     print(f"Secondary Intents Exact Match:        {metrics['secondary_intents_accuracy']:.2%} ({metrics['secondary_intents_correct']}/{total})")
     print(f"Technical Malfunction Scope Accuracy: {metrics['technical_scope_accuracy']:.2%} ({metrics['technical_scope_correct']}/{total})")
     print(f"Cross-Cutting Flags Accuracy:         {metrics['cross_cutting_flags_accuracy']:.2%} ({metrics['cross_cutting_flags_correct']}/{total})")
-    print(f"Non-Intent Accuracy:                  {metrics['non_intent_accuracy']:.2%} ({metrics['non_intent_correct']}/{total})")
+    if non_intent_total > 0 and metrics["non_intent_accuracy"] is not None:
+        print(f"Non-Intent Accuracy:                  {metrics['non_intent_accuracy']:.2%} ({metrics['non_intent_correct']}/{non_intent_total})")
+    else:
+        print(f"Non-Intent Accuracy:                  N/A (0 gold examples)")
     print(f"Full Record Exact Match Accuracy:     {metrics['full_record_exact_match_accuracy']:.2%} ({metrics['full_record_exact_match_correct']}/{total})")
     print(f"Total Discrepancies / Errors:         {metrics['total_errors']}")
     print("=" * 80)
