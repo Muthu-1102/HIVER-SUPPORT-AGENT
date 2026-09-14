@@ -35,7 +35,9 @@ DEFAULT_OPENROUTER_MODEL = "meta-llama/llama-3.3-70b-instruct:free"
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 # Groq configuration
+# Groq configuration
 DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b"
+DEFAULT_GROQ_FALLBACK_MODEL = "openai/gpt-oss-20b"
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 # 5 Rubric dimensions
@@ -97,6 +99,8 @@ class JudgeScore:
     overall_score: int
     short_reason: str
     model: str
+    fallback_used: bool = False
+    attempts: int = 1
     raw_response: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
@@ -110,6 +114,8 @@ class JudgeScore:
             "overall_score": self.overall_score,
             "short_reason": self.short_reason,
             "model": self.model,
+            "fallback_used": self.fallback_used,
+            "attempts": self.attempts,
             "raw_response": self.raw_response,
         }
 
@@ -146,7 +152,12 @@ def validate_judge_score_dict(data: Dict[str, Any]) -> None:
         raise ValueError("Field 'short_reason' must be a non-empty string")
 
 
-def parse_judge_response(raw_text: str, model: str = "") -> JudgeScore:
+def parse_judge_response(
+    raw_text: str,
+    model: str = "",
+    fallback_used: bool = False,
+    attempts: int = 1,
+) -> JudgeScore:
     """Safely extract and parse JSON from the LLM judge response text."""
     clean_text = raw_text.strip()
 
@@ -178,6 +189,8 @@ def parse_judge_response(raw_text: str, model: str = "") -> JudgeScore:
         overall_score=int(data["overall_score"]),
         short_reason=str(data["short_reason"]).strip(),
         model=model,
+        fallback_used=fallback_used,
+        attempts=attempts,
         raw_response=raw_text,
     )
 
@@ -288,33 +301,58 @@ def resolve_judge_config(
         )
 
 
+def _extract_retry_delay(err: urllib.error.HTTPError, default_delay: float = 8.0) -> float:
+    """Extract delay from Retry-After or x-ratelimit-reset-requests headers."""
+    try:
+        retry_after = err.headers.get("Retry-After") if err.headers else None
+        if retry_after:
+            return max(float(retry_after), 1.0)
+        reset_req = err.headers.get("x-ratelimit-reset-requests") if err.headers else None
+        if reset_req:
+            reset_str = str(reset_req).strip().lower()
+            if reset_str.endswith("ms"):
+                return max(float(reset_str[:-2]) / 1000.0, 1.0)
+            elif reset_str.endswith("s"):
+                return max(float(reset_str[:-1]), 1.0)
+            elif reset_str.endswith("m"):
+                return max(float(reset_str[:-1]) * 60.0, 1.0)
+            return max(float(reset_str), 1.0)
+    except Exception:
+        pass
+    return default_delay
+
+
 def evaluate_response(
     customer_text: str,
     agent_response: str,
     historical_context: Optional[str] = None,
     model: Optional[str] = None,
+    fallback_model: Optional[str] = None,
     api_key: Optional[str] = None,
     provider: Optional[str] = None,
-    max_retries: int = 3,
+    max_retries: int = 2,
     timeout: int = 30,
 ) -> JudgeScore:
     """Evaluate a generated agent response using OpenRouter or Groq LLM judge.
+
+    Supports intelligent HTTP 429 Retry-After handling and secondary model fallback.
 
     Args:
         customer_text: The inbound customer query or conversation thread text.
         agent_response: The generated support agent response to grade.
         historical_context: Optional authentic historical agent response/context.
-        model: Model identifier (defaults to provider model env var or default).
+        model: Primary model identifier (defaults to provider model env var or default).
+        fallback_model: Optional fallback model (e.g. 'openai/gpt-oss-20b' on Groq).
         api_key: API key (defaults to provider env var).
         provider: Provider identifier ('openrouter' or 'groq').
-        max_retries: Maximum number of retries upon transient network or malformed response errors.
+        max_retries: Maximum number of retries per model.
         timeout: Request timeout in seconds.
 
     Returns:
-        JudgeScore with dimension ratings, overall score, and short justification.
+        JudgeScore with dimension ratings, overall score, model name, and fallback metadata.
 
     Raises:
-        ValueError: If API key is not set or if response fails schema validation after retries.
+        ValueError: If API key is not set or if response fails schema validation.
     """
     prov_name, api_url, key, chosen_model = resolve_judge_config(
         provider=provider,
@@ -322,19 +360,15 @@ def evaluate_response(
         api_key=api_key,
     )
 
+    # Determine fallback model candidate
+    effective_fallback: Optional[str] = fallback_model
+    if effective_fallback is None and prov_name == "groq":
+        effective_fallback = DEFAULT_GROQ_FALLBACK_MODEL
+    if effective_fallback == chosen_model:
+        effective_fallback = None
+
     system_prompt, user_prompt = build_judge_prompt(customer_text, agent_response, historical_context)
 
-    payload = {
-        "model": chosen_model,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-        "temperature": 0.0,
-        "response_format": {"type": "json_object"},
-    }
-
-    req_data = json.dumps(payload).encode("utf-8")
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {key.strip()}",
@@ -344,28 +378,83 @@ def evaluate_response(
         headers["HTTP-Referer"] = "https://github.com/spotify-support-agent"
         headers["X-Title"] = "Spotify Support Agent Quality Judge"
 
-    last_error: Optional[Exception] = None
+    def _execute_model_call(target_model: str, is_fallback: bool) -> Tuple[Optional[JudgeScore], Optional[Exception], int]:
+        payload = {
+            "model": target_model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "temperature": 0.0,
+            "response_format": {"type": "json_object"},
+        }
+        req_data = json.dumps(payload).encode("utf-8")
+        last_err: Optional[Exception] = None
 
-    for attempt in range(1, max_retries + 1):
-        req = urllib.request.Request(api_url, data=req_data, headers=headers, method="POST")
-        try:
-            ctx = ssl.create_default_context()
-            with urllib.request.urlopen(req, timeout=timeout, context=ctx) as resp:
-                resp_body = resp.read().decode("utf-8")
-                resp_json = json.loads(resp_body)
+        for attempt in range(1, max_retries + 1):
+            req = urllib.request.Request(api_url, data=req_data, headers=headers, method="POST")
+            try:
+                ctx = ssl.create_default_context()
+                with urllib.request.urlopen(req, timeout=timeout, context=ctx) as resp:
+                    resp_body = resp.read().decode("utf-8")
+                    resp_json = json.loads(resp_body)
 
-                # Extract response text
-                choices = resp_json.get("choices", [])
-                if not choices:
-                    raise ValueError(f"{prov_name.capitalize()} response missing 'choices': {resp_json}")
-                message_content = choices[0].get("message", {}).get("content", "")
+                    choices = resp_json.get("choices", [])
+                    if not choices:
+                        raise ValueError(f"{prov_name.capitalize()} response missing 'choices': {resp_json}")
+                    message_content = choices[0].get("message", {}).get("content", "")
 
-                return parse_judge_response(message_content, model=chosen_model)
+                    score = parse_judge_response(
+                        message_content,
+                        model=target_model,
+                        fallback_used=is_fallback,
+                        attempts=attempt,
+                    )
+                    return score, None, attempt
 
-        except (urllib.error.HTTPError, urllib.error.URLError, json.JSONDecodeError, ValueError) as err:
-            last_error = err
-            if attempt < max_retries:
-                sleep_sec = 2 ** attempt
-                time.sleep(sleep_sec)
+            except urllib.error.HTTPError as err:
+                last_err = err
+                if err.code == 429:
+                    sleep_sec = _extract_retry_delay(err, default_delay=8.0)
+                    if attempt < max_retries:
+                        time.sleep(sleep_sec)
+                else:
+                    if attempt < max_retries:
+                        time.sleep(2 ** attempt)
 
-    raise ValueError(f"LLM judge evaluation failed after {max_retries} attempts: {last_error}")
+            except (urllib.error.URLError, json.JSONDecodeError, ValueError) as err:
+                last_err = err
+                if attempt < max_retries:
+                    time.sleep(2 ** attempt)
+
+        return None, last_err, max_retries
+
+    # 1. Attempt Primary Model
+    score, primary_err, primary_attempts = _execute_model_call(chosen_model, is_fallback=False)
+    if score is not None:
+        return score
+
+    # 2. Attempt Fallback Model (if defined)
+    if effective_fallback:
+        fb_score, fb_err, fb_attempts = _execute_model_call(effective_fallback, is_fallback=True)
+        if fb_score is not None:
+            # Total attempts includes primary attempts + fallback attempts
+            return JudgeScore(
+                correctness=fb_score.correctness,
+                groundedness=fb_score.groundedness,
+                helpfulness=fb_score.helpfulness,
+                brand_appropriateness=fb_score.brand_appropriateness,
+                safety_escalation=fb_score.safety_escalation,
+                overall_score=fb_score.overall_score,
+                short_reason=fb_score.short_reason,
+                model=effective_fallback,
+                fallback_used=True,
+                attempts=primary_attempts + fb_attempts,
+                raw_response=fb_score.raw_response,
+            )
+        raise ValueError(
+            f"LLM judge evaluation failed for both primary ({chosen_model}: {primary_err}) "
+            f"and fallback ({effective_fallback}: {fb_err})"
+        )
+
+    raise ValueError(f"LLM judge evaluation failed for primary ({chosen_model}) after {max_retries} attempts: {primary_err}")

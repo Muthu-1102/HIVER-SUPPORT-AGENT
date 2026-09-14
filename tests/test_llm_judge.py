@@ -18,6 +18,7 @@ import json
 import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+import urllib.error
 import pytest
 
 from src.spotify_agent.llm_judge import (
@@ -408,9 +409,120 @@ def test_evaluate_response_groq_mocked_success(monkeypatch: pytest.MonkeyPatch) 
         assert score.correctness == 5
         assert score.overall_score == 5
         assert score.model == "openai/gpt-oss-120b"
+        assert score.fallback_used is False
         assert score.short_reason == "High quality Groq evaluation."
         assert mock_urlopen.called
 
         req = mock_urlopen.call_args[0][0]
         assert req.full_url == "https://api.groq.com/openai/v1/chat/completions"
         assert req.get_header("Authorization") == f"Bearer {fake_groq_key}"
+
+
+def test_extract_retry_delay_headers() -> None:
+    """_extract_retry_delay must parse Retry-After and x-ratelimit-reset-requests properly."""
+    from src.spotify_agent.llm_judge import _extract_retry_delay
+    import urllib.error
+
+    # Case 1: Retry-After integer
+    err1 = urllib.error.HTTPError("http://api", 429, "Too Many Requests", {"Retry-After": "12"}, None)
+    assert _extract_retry_delay(err1) == 12.0
+
+    # Case 2: x-ratelimit-reset-requests in seconds
+    err2 = urllib.error.HTTPError("http://api", 429, "Too Many Requests", {"x-ratelimit-reset-requests": "6s"}, None)
+    assert _extract_retry_delay(err2) == 6.0
+
+    # Case 3: x-ratelimit-reset-requests in milliseconds
+    err3 = urllib.error.HTTPError("http://api", 429, "Too Many Requests", {"x-ratelimit-reset-requests": "5000ms"}, None)
+    assert _extract_retry_delay(err3) == 5.0
+
+    # Case 4: Default fallback
+    err4 = urllib.error.HTTPError("http://api", 429, "Too Many Requests", {}, None)
+    assert _extract_retry_delay(err4, default_delay=8.0) == 8.0
+
+
+def test_evaluate_response_fallback_on_primary_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When primary model fails on Groq, evaluation must switch to fallback model."""
+    fake_groq_key = "gsk_test_fake_groq_key_fallback"
+    monkeypatch.setenv("GROQ_API_KEY", fake_groq_key)
+    monkeypatch.setenv("LLM_JUDGE_PROVIDER", "groq")
+
+    fallback_payload = {
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": json.dumps({
+                        "correctness": 4,
+                        "groundedness": 4,
+                        "helpfulness": 4,
+                        "brand_appropriateness": 4,
+                        "safety_escalation": 5,
+                        "overall_score": 4,
+                        "short_reason": "Fallback 20B evaluation succeeded.",
+                    }),
+                }
+            }
+        ]
+    }
+
+    mock_resp_obj = MagicMock()
+    mock_resp_obj.read.return_value = json.dumps(fallback_payload).encode("utf-8")
+    mock_resp_obj.__enter__.return_value = mock_resp_obj
+
+    # Fail on first 2 calls (primary model max_retries=2), succeed on 3rd call (fallback model)
+    mock_429 = urllib.error.HTTPError("http://api", 429, "Rate limit", {"Retry-After": "1"}, None)
+
+    with patch("time.sleep", return_value=None):
+        with patch("urllib.request.urlopen", side_effect=[mock_429, mock_429, mock_resp_obj]) as mock_urlopen:
+            score = evaluate_response(
+                customer_text="Customer: help",
+                agent_response="Agent: reply",
+                model="openai/gpt-oss-120b",
+                fallback_model="openai/gpt-oss-20b",
+                provider="groq",
+                max_retries=2,
+            )
+
+            assert score.model == "openai/gpt-oss-20b"
+            assert score.fallback_used is True
+            assert score.overall_score == 4
+            assert mock_urlopen.call_count == 3
+
+
+def test_historical_and_complete_judge_artifacts() -> None:
+    """Verify integrity of historical 10-record and complete 30-record judge artifacts."""
+    hist_path = Path(__file__).resolve().parent.parent / "evaluation" / "llm_judge_results.jsonl"
+    complete_path = Path(__file__).resolve().parent.parent / "evaluation" / "llm_judge_results_complete.jsonl"
+    reviewer_path = Path(__file__).resolve().parent.parent / "evaluation" / "independent_reviewer_ratings.jsonl"
+    agreement_path = Path(__file__).resolve().parent.parent / "evaluation" / "judge_reviewer_agreement.json"
+
+    # Historical file: 10 records preserved byte-for-byte without forced fake metadata
+    assert hist_path.exists(), "Historical judge results file must exist"
+    hist_records = load_jsonl(hist_path)
+    assert len(hist_records) == 10, f"Historical file must contain exactly 10 records, got {len(hist_records)}"
+    for r in hist_records:
+        validate_judge_score_dict(r)
+        assert r.get("provider") == "groq"
+        assert r.get("model") == "openai/gpt-oss-120b"
+
+    # Complete file: 30 records with explicit fallback_used=False
+    assert complete_path.exists(), "Complete judge results file must exist"
+    complete_records = load_jsonl(complete_path)
+    assert len(complete_records) == 30, f"Complete file must contain exactly 30 records, got {len(complete_records)}"
+    for r in complete_records:
+        validate_judge_score_dict(r)
+        assert r.get("provider") == "groq"
+        assert r.get("model") == "openai/gpt-oss-120b"
+        assert r.get("fallback_used") is False
+        assert r.get("attempts") == 1
+
+    # Independent reviewer ratings: 30 records
+    assert reviewer_path.exists(), "Independent reviewer ratings file must exist"
+    reviewer_records = load_jsonl(reviewer_path)
+    assert len(reviewer_records) == 30, f"Reviewer ratings must contain exactly 30 records, got {len(reviewer_records)}"
+
+    # Agreement report: exactly 30 matched pairs
+    assert agreement_path.exists(), "Agreement report must exist"
+    agreement_data = json.loads(agreement_path.read_text(encoding="utf-8"))
+    assert agreement_data.get("matched_conversations_count") == 30
+    assert agreement_data.get("evaluator_label") == "Independent Reviewer"

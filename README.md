@@ -226,27 +226,55 @@ The evaluation harness supports OpenAI-compatible chat completion endpoints from
 ### 10.4 Deterministic Evaluation Subset & Independent-Reviewer Protocol
 
 - **Evaluation Subset:** $N=30$ conversations deterministically sampled from the 200 canonical gold conversations using a fixed random seed (`seed=42`).
-- **Unscored Human Template:** [evaluation/human_judge_ratings_template.jsonl](evaluation/human_judge_ratings_template.jsonl) and [evaluation/human_judge_review.md](evaluation/human_judge_review.md) contain the 30-record blank review materials. Human-agreement results have **not** been established.
-- **Independent Reviewer:** [evaluation/independent_reviewer_ratings.jsonl](evaluation/independent_reviewer_ratings.jsonl) contains 30 completed independent-reviewer ratings; [evaluation/independent_reviewer_ratings.json](evaluation/independent_reviewer_ratings.json) is its JSON companion artifact.
-- **Completed Judge Run:** [evaluation/llm_judge_results.jsonl](evaluation/llm_judge_results.jsonl) contains only 10 completed records. The live judge stopped at 10/30 because of the Groq provider rate limit. Every recorded judge result is from **Groq** using **`openai/gpt-oss-120b`**; no OpenRouter results were run, combined, or aggregated with these results.
-- **Integrity Rule:** The repository does not fabricate reviewer ratings or missing judge records.
+- **Complete LLM Judge Evaluation (Current Run):** Full 30-record evaluation saved in [evaluation/llm_judge_results_complete.jsonl](evaluation/llm_judge_results_complete.jsonl):
+  - **LLM Judge Evaluated Records:** **30 / 30**
+  - **Provider:** **Groq**
+  - **Model:** **`openai/gpt-oss-120b`**
+  - **Fallback Invocations:** **0** (0 fallbacks; all 30 records completed on primary model)
+  - **Failures / Errors:** **0**
+- **Independent Reviewer Ratings:** [evaluation/independent_reviewer_ratings.jsonl](evaluation/independent_reviewer_ratings.jsonl) contains **30 / 30** completed independent-reviewer ratings; [evaluation/independent_reviewer_ratings.json](evaluation/independent_reviewer_ratings.json) is its companion JSON artifact.
+- **Judge / Reviewer Overlap:** **30 / 30** (100% complete overlap across all 30 evaluated conversation IDs).
+- **Historical Interrupted Run:** [evaluation/llm_judge_results.jsonl](evaluation/llm_judge_results.jsonl) is the earlier interrupted 10-record run and is retained unchanged as a historical artifact.
+- **Human Review Materials & Agreement Disclaimer:** [evaluation/human_judge_ratings_template.jsonl](evaluation/human_judge_ratings_template.jsonl) and [evaluation/human_judge_review.md](evaluation/human_judge_review.md) contain the 30-record blank evaluation materials. **Actual human-agreement evidence was not established** (human rating scores remain unpopulated/null). The reported agreement is strictly **Independent-Reviewer Agreement**, NOT human ground-truth evidence.
+- **Integrity Rule:** The repository does not fabricate ratings or impute missing values.
 
-### 10.5 Agreement Metrics
+### 10.5 Evaluation Resumption, Rate Limits & Fallbacks
 
-The comparison harness ([scripts/compare_judge_human.py](scripts/compare_judge_human.py)) aligns independent-reviewer and LLM-judge ratings by `conversation_id`. Although the reviewer completed 30 ratings, the agreement report ([evaluation/judge_reviewer_agreement.json](evaluation/judge_reviewer_agreement.json)) computes metrics only for the **10 overlapping IDs**; it does not impute the 20 missing judge ratings.
+The evaluator supports safe continuation of an interrupted run through `--resume-from`. Existing completed conversation IDs are skipped and copied unchanged into the staging output; only missing records are sent to the API. The historical [evaluation/llm_judge_results.jsonl](evaluation/llm_judge_results.jsonl) remains unchanged. For example, the completed run could be resumed with:
+
+```powershell
+python scripts/evaluate_llm_judge.py --provider groq --resume-from evaluation/llm_judge_results.jsonl --output evaluation/llm_judge_results_complete.jsonl
+```
+
+Requests use an 8-second default pacing delay. HTTP 429 responses inspect `Retry-After` and `x-ratelimit-reset-requests`, and retry timing uses the upstream reset information when available. This pacing and retry handling does not guarantee that provider rate limits will be avoided.
+
+For Groq, the primary model is `openai/gpt-oss-120b` and the fallback model is `openai/gpt-oss-20b`. The fallback is attempted only after the configured primary-model retry behavior fails. Each result records the provider, model, `fallback_used`, and `attempts`. In the completed 30-record run, all records used the primary model, with zero fallbacks. The sample remains reproducible through deterministic `seed=42` selection; the resume/fallback capabilities describe evaluator behavior, while the completed artifact records what actually occurred in that run.
+
+### 10.6 Agreement Metrics (Complete 30/30 Overlap)
+
+The comparison harness ([scripts/compare_judge_human.py](scripts/compare_judge_human.py)) aligns independent-reviewer and LLM-judge ratings by `conversation_id`. With both the complete 30-record judge file ([evaluation/llm_judge_results_complete.jsonl](evaluation/llm_judge_results_complete.jsonl)) and 30 completed independent-reviewer ratings ([evaluation/independent_reviewer_ratings.jsonl](evaluation/independent_reviewer_ratings.jsonl)), the agreement report ([evaluation/judge_reviewer_agreement.json](evaluation/judge_reviewer_agreement.json)) computes metrics across all **30 / 30 overlapping pairs**:
+
+| Rubric Dimension | Reviewer Mean | Judge Mean | Exact Agreement (%) | MAE | Mean Bias | Spearman $\rho$ | Quadratic Weighted Kappa (QWK) |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| **Correctness** | 2.70 | 4.00 | 23.33% | 1.367 | +1.300 | 0.415 | 0.239 |
+| **Groundedness** | 2.73 | 4.67 | 6.67% | 1.933 | +1.933 | 0.293 | 0.139 |
+| **Helpfulness** | 2.57 | 3.20 | 23.33% | 0.900 | +0.633 | 0.470 | 0.377 |
+| **Brand Appropriateness** | 3.67 | 4.57 | 16.67% | 0.967 | +0.900 | 0.449 | 0.293 |
+| **Safety & Escalation** | 3.93 | 5.00 | 3.33% | 1.067 | +1.067 | 0.000 | 0.000 |
+| **Overall Score** | 2.70 | 3.70 | 20.00% | 1.067 | +1.000 | 0.535 | 0.373 |
 
 - **Exact Agreement Rate (%)**: Percentage of identical scores ($Score_{Reviewer} == Score_{Judge}$).
 - **Mean Absolute Error (MAE)**: $\frac{1}{N}\sum |Score_{Reviewer} - Score_{Judge}|$.
-- **Mean Bias Error**: Average directional skew ($Score_{Judge} - Score_{Reviewer}$).
-- **Spearman Rank Correlation ($\rho$)**: Rank-order agreement across ordinal ratings.
-- **Quadratic Weighted Kappa (QWK)**: Standard inter-rater reliability metric penalizing large score disagreements quadratically.
+- **Mean Bias Error**: Average directional skew ($Score_{Judge} - Score_{Reviewer}$). A positive value indicates the judge was more lenient than the independent reviewer.
+- **Spearman Rank Correlation ($\rho$)**: Rank-order agreement across ordinal ratings (0.535 on overall score).
+- **Quadratic Weighted Kappa (QWK)**: Standard inter-rater reliability metric penalizing large score disagreements quadratically (0.373 on overall score).
 
-### 10.6 Limitations of LLM-as-a-Judge
+### 10.7 Limitations of LLM-as-a-Judge
 
 1. **Prompt & Format Sensitivity:** Small phrasing changes in rubric definitions can shift score calibration.
 2. **Verbosity & Politeness Bias:** LLMs may favor overly wordy responses unless strictly prompted to value concise social-care responses.
-3. **Partial Provider-Limited Run:** The saved live run contains 10 of 30 planned records because Groq rate-limited the request sequence. It is a Groq-only partial result and must not be treated as a 30-record result or combined with absent OpenRouter results.
-4. **No Human Agreement Result:** The repository has blank human-review materials, but no completed human ratings; the reported agreement is only with the independent reviewer.
+3. **Reviewer-Judge Leniency Gap:** The LLM judge (`openai/gpt-oss-120b`) scored higher on average than the independent reviewer across all dimensions (Judge Overall Mean: 3.70 vs. Reviewer Overall Mean: 2.70; Mean Bias: +1.00), demonstrating a consistent leniency differential.
+4. **No Human Agreement Result:** The repository provides blank human-review materials, but no completed human ratings; the reported agreement is strictly with the independent reviewer, and no claim of human ground-truth evidence is made.
 
 ---
 
@@ -312,7 +340,7 @@ The comparison harness ([scripts/compare_judge_human.py](scripts/compare_judge_h
 
 - **Compare LLM Judge with Independent-Reviewer Ratings:**
   ```powershell
-  python scripts/compare_judge_human.py --judge-results evaluation/llm_judge_results.jsonl --human-ratings evaluation/independent_reviewer_ratings.jsonl --output evaluation/judge_reviewer_agreement.json --evaluator-label "Independent Reviewer"
+  python scripts/compare_judge_human.py --judge-results evaluation/llm_judge_results_complete.jsonl --human-ratings evaluation/independent_reviewer_ratings.jsonl --output evaluation/judge_reviewer_agreement.json --evaluator-label "Independent Reviewer"
   ```
 
 ---
@@ -345,12 +373,13 @@ hiver-support-agent/
 │   ├── golden_set_results.json              # Canonical evaluation results & confusion matrix
 │   ├── golden_set_error_analysis.jsonl      # Record-by-record discrepancy breakdown
 │   ├── holdout_evaluation_results.json      # Qualitative holdout predictions (50 records)
-│   ├── human_judge_ratings_template.jsonl   # 30-record blank human evaluation template
+│   ├── human_judge_ratings_template.jsonl   # 30-record blank human evaluation template (unpopulated)
 │   ├── human_judge_review.md                # 30-record blank human review sheet
-│   ├── independent_reviewer_ratings.json    # JSON companion for independent-reviewer ratings
+│   ├── independent_reviewer_ratings.json    # JSON companion for 30 independent-reviewer ratings
 │   ├── independent_reviewer_ratings.jsonl   # 30 completed independent-reviewer ratings
-│   ├── judge_reviewer_agreement.json        # Metrics for the 10 overlapping judge/reviewer IDs
-│   ├── llm_judge_results.jsonl              # Partial 10-record Groq run (`openai/gpt-oss-120b`)
+│   ├── judge_reviewer_agreement.json        # Full agreement report (30/30 overlapping pairs)
+│   ├── llm_judge_results.jsonl              # Historical 10-record run (interrupted, retained unchanged)
+│   ├── llm_judge_results_complete.jsonl     # Complete 30-record Groq run (`openai/gpt-oss-120b`, 0 fallbacks)
 │   └── step8_error_analysis.md              # Systematic error analysis report
 ├── data/
 │   └── processed/

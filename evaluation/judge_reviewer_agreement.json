@@ -11,63 +11,63 @@
     "correctness": {
       "evaluator_mean": 2.7,
       "reviewer_mean": 2.7,
-      "judge_mean": 4.7,
-      "exact_agreement_pct": 10.0,
-      "mean_absolute_error": 2.0,
-      "mean_bias": 2.0,
-      "spearman_rho": -0.077,
-      "quadratic_weighted_kappa": 0.004
+      "judge_mean": 4.0,
+      "exact_agreement_pct": 23.33,
+      "mean_absolute_error": 1.367,
+      "mean_bias": 1.3,
+      "spearman_rho": 0.415,
+      "quadratic_weighted_kappa": 0.239
     },
     "groundedness": {
-      "evaluator_mean": 2.9,
-      "reviewer_mean": 2.9,
-      "judge_mean": 4.7,
-      "exact_agreement_pct": 0.0,
-      "mean_absolute_error": 1.8,
-      "mean_bias": 1.8,
-      "spearman_rho": 0.591,
-      "quadratic_weighted_kappa": 0.241
+      "evaluator_mean": 2.7333333333333334,
+      "reviewer_mean": 2.7333333333333334,
+      "judge_mean": 4.666666666666667,
+      "exact_agreement_pct": 6.67,
+      "mean_absolute_error": 1.933,
+      "mean_bias": 1.933,
+      "spearman_rho": 0.293,
+      "quadratic_weighted_kappa": 0.139
     },
     "helpfulness": {
-      "evaluator_mean": 2.5,
-      "reviewer_mean": 2.5,
-      "judge_mean": 3.5,
-      "exact_agreement_pct": 20.0,
-      "mean_absolute_error": 1.0,
-      "mean_bias": 1.0,
-      "spearman_rho": 0.693,
-      "quadratic_weighted_kappa": 0.391
+      "evaluator_mean": 2.566666666666667,
+      "reviewer_mean": 2.566666666666667,
+      "judge_mean": 3.2,
+      "exact_agreement_pct": 23.33,
+      "mean_absolute_error": 0.9,
+      "mean_bias": 0.633,
+      "spearman_rho": 0.47,
+      "quadratic_weighted_kappa": 0.377
     },
     "brand_appropriateness": {
-      "evaluator_mean": 3.6,
-      "reviewer_mean": 3.6,
-      "judge_mean": 4.8,
-      "exact_agreement_pct": 0.0,
-      "mean_absolute_error": 1.2,
-      "mean_bias": 1.2,
-      "spearman_rho": 0.645,
-      "quadratic_weighted_kappa": 0.286
+      "evaluator_mean": 3.6666666666666665,
+      "reviewer_mean": 3.6666666666666665,
+      "judge_mean": 4.566666666666666,
+      "exact_agreement_pct": 16.67,
+      "mean_absolute_error": 0.967,
+      "mean_bias": 0.9,
+      "spearman_rho": 0.449,
+      "quadratic_weighted_kappa": 0.293
     },
     "safety_escalation": {
-      "evaluator_mean": 4.0,
-      "reviewer_mean": 4.0,
+      "evaluator_mean": 3.933333333333333,
+      "reviewer_mean": 3.933333333333333,
       "judge_mean": 5.0,
-      "exact_agreement_pct": 10.0,
-      "mean_absolute_error": 1.0,
-      "mean_bias": 1.0,
+      "exact_agreement_pct": 3.33,
+      "mean_absolute_error": 1.067,
+      "mean_bias": 1.067,
       "spearman_rho": 0.0,
       "quadratic_weighted_kappa": 0.0
     },
     "overall_score": {
       "evaluator_mean": 2.7,
       "reviewer_mean": 2.7,
-      "judge_mean": 3.9,
+      "judge_mean": 3.7,
       "exact_agreement_pct": 20.0,
-      "mean_absolute_error": 1.2,
-      "mean_bias": 1.2,
-      "spearman_rho": 0.449,
-      "quadratic_weighted_kappa": 0.27
+      "mean_absolute_error": 1.067,
+      "mean_bias": 1.0,
+      "spearman_rho": 0.535,
+      "quadratic_weighted_kappa": 0.373
     }
   },
-  "matched_conversations_count": 10
+  "matched_conversations_count": 30
 }
