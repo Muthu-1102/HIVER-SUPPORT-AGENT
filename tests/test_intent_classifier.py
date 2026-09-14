@@ -317,3 +317,92 @@ def test_step9_targeted_refinements():
     assert res_broadcast.technical_malfunction_scope == "platform_wide"
 
 
+def test_secondary_intent_detection_and_disambiguation():
+    """Verify secondary intent detection rules and contextual disambiguations."""
+    # 1. Login with explicit app error code -> 06 primary, 07 secondary, unclear scope
+    res_login_err = classify_message("I cannot log in to my account, getting Error Code 3.")
+    assert res_login_err.primary_intent == "06_login_authentication"
+    assert "07_technical_malfunction" in res_login_err.secondary_intents
+    assert res_login_err.technical_malfunction_scope == "unclear"
+
+    # 2. Creator uploaded music under wrong artist name -> 09 primary, 02 secondary
+    res_creator = classify_message("Any idea on why my music is uploaded to Spotify under the wrong artist name?")
+    assert res_creator.primary_intent == "09_artist_rights_holder_mgmt"
+    assert "02_catalog_metadata_error" in res_creator.secondary_intents
+
+    # 3. Future plan feature suggestion -> 08 primary, 05 secondary
+    res_future = classify_message("Is there any future plans to allow to invite more family members to the family plan?")
+    assert res_future.primary_intent == "08_feature_request"
+    assert "05_subscription_plan_management" in res_future.secondary_intents
+
+    # 4. Student deal sign-up charging issue -> 04 primary, 05 secondary
+    res_deal = classify_message("I never finished signing up for your student premium deal but I was still charged for it. Any chance of a refund?")
+    assert res_deal.primary_intent == "04_billing_payment"
+    assert "05_subscription_plan_management" in res_deal.secondary_intents
+
+    # 5. Active plan eligibility / account update with billing dispute -> 04 primary, 05 secondary preserved
+    res_claim = classify_message("I updated my account details to claim student discount, but I am being charged full price.")
+    assert res_claim.primary_intent == "04_billing_payment"
+    assert "05_subscription_plan_management" in res_claim.secondary_intents
+
+    # 6. Pure billing dispute with plan name mentioned passively -> 04 primary, NO 05 secondary
+    res_bill1 = classify_message("I got charged for our family plan I expect my family to be able to listen. Fix ur system")
+    assert res_bill1.primary_intent == "04_billing_payment"
+    assert "05_subscription_plan_management" not in res_bill1.secondary_intents
+
+    res_bill2 = classify_message("Hey, had to cancel my subscription. Today was renewal date -- any chance I can get a refund?")
+    assert res_bill2.primary_intent == "04_billing_payment"
+    assert "05_subscription_plan_management" not in res_bill2.secondary_intents
+
+    # 7. SD card hardware removal does not trigger 01_catalog_content_gap
+    res_sd = classify_message("Your app corrupted my SD Card, I have to pay $800 to get it removed.")
+    assert res_sd.primary_intent == "07_technical_malfunction"
+    assert "01_catalog_content_gap" not in res_sd.secondary_intents
+
+    # 8. Regional album inquiry does not trigger 01_catalog_content_gap
+    res_region = classify_message("Hey, when will the new album be on Spotify for UK? It is in the US though")
+    assert res_region.primary_intent == "03_region_availability"
+    assert "01_catalog_content_gap" not in res_region.secondary_intents
+
+
+def test_cross_cutting_flags_and_sorting():
+    """Verify sorted cross-cutting flags and customer dissatisfaction phrases."""
+    # 1. Flag ordering is deterministically sorted
+    res_flags = classify_message("Already write a pm to support about this third time. Could you dm us back?")
+    assert res_flags.cross_cutting_flags == ("alternate_channel_request", "prior_interaction_dissatisfaction")
+
+    # 2. Customer dissatisfaction phrases
+    res_dis = classify_message("Terrible customer service! No one fixed a thing and I sent an email to support.")
+    assert "prior_interaction_dissatisfaction" in res_dis.cross_cutting_flags
+
+    # 3. Alternate channel phrases
+    res_chan = classify_message("Please check dms or write a pm regarding my account.")
+    assert "alternate_channel_request" in res_chan.cross_cutting_flags
+
+
+def test_technical_scope_device_diagnostics():
+    """Verify diagnostic scope identification for explicit device naming."""
+    # 1. Standalone iPhone device mention
+    res_iphone = classify_message("fix your app. iPhone after a song ends the app crashes, no error messages.")
+    assert res_iphone.primary_intent == "07_technical_malfunction"
+    assert res_iphone.technical_malfunction_scope == "individual"
+
+    # 2. Browser session minimization in account/auth issue
+    conv = {
+        "ordered_messages": [
+            {"author_id": "cust", "inbound": True, "text": "Got randomly logged out of my acct (browser was minimized) mid song! And now it just won't play at all."}
+        ]
+    }
+    res_browser = classify_conversation(conv)
+    assert res_browser.primary_intent == "06_login_authentication"
+    assert "07_technical_malfunction" in res_browser.secondary_intents
+    assert res_browser.technical_malfunction_scope == "individual"
+
+
+def test_dissatisfaction_vs_troubleshooting():
+    """Ensure troubleshooting actions (e.g. rebooting twice) do not trigger dissatisfaction flag."""
+    res_reboot = classify_message("I just rebooted a second time.. it's functioning again thank you for your time and effort")
+    assert "prior_interaction_dissatisfaction" not in res_reboot.cross_cutting_flags
+
+    res_product_complaint = classify_message("Your system for management is crap I got charged for our family plan. Fix ur system")
+    assert "prior_interaction_dissatisfaction" not in res_product_complaint.cross_cutting_flags

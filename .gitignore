@@ -20,18 +20,28 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+.pytest_cache/
 
 # Virtual Environment
 .venv/
 venv/
 ENV/
 
-# Data & Models
+# Scratch & Temporary Analysis
+scratch/
+
+# Large Raw & Intermediate Datasets
 data/raw/
-data/processed/*
-!data/processed/golden_set_exclusions.txt
-*.csv
-*.jsonl
+data/processed/spotify_conversations.jsonl
+data/processed/intent_discovery_sample.jsonl
+data/processed/annotator_*
+data/processed/golden_set_candidates_run*
+data/processed/*.csv
+data/processed/spotify_conversation_stats.json
+data/processed/spotify_audit_summary.json
+data/processed/double_annotation_conversation_ids.txt
+
+# Binary / Model Formats
 *.parquet
 *.pt
 *.bin
@@ -43,3 +53,8 @@ data/processed/*
 .DS_Store
 Thumbs.db
 .qodo/
+
+# Track Evaluation Artifacts explicitly
+!evaluation/*.json
+!evaluation/*.jsonl
+!evaluation/*.md

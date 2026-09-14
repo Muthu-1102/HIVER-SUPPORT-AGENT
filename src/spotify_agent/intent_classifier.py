@@ -116,8 +116,14 @@ def _detect_flags(customer_text: str, full_thread_text: str = "") -> tuple[str, 
         "3rd time",
         "fourth time",
         "4th time",
-        "second time",
-        "2nd time",
+        "asking for the second time",
+        "second time reaching out",
+        "second time contacting",
+        "second time asking",
+        "second time i've asked",
+        "second time i asked",
+        "second time today",
+        "for the second time",
         "again and again",
         "still no reply",
         "no one replied",
@@ -129,29 +135,45 @@ def _detect_flags(customer_text: str, full_thread_text: str = "") -> tuple[str, 
         "sent multiple messages",
         "previously contacted",
         "previous interaction",
-        "have resent",
         "sent you a dm yesterday",
-        "still without premium",
-        "still waiting",
-        "been days",
         "hours ago no reply",
         "9hours ago",
         "9 hours ago",
-        "hours ago",
         "unresolved",
         "written several times",
         "sent you several emails",
         "several emails",
         "no answer",
         "still have no answer",
-        "already asked",
         "still haven't heard",
         "still havent heard",
         "nobody is answering",
         "no one is answering",
         "still waiting for a solution",
+        "still waiting for a reply",
+        "still waiting for response",
+        "still waiting for an answer",
         "on attend toujours",
-        "doesn't cut it",
+        "sent an email to support",
+        "havent reply yet",
+        "haven't reply yet",
+        "no one answered me back",
+        "how long does it take for them to answer",
+        "four times in the last month",
+        "i've changed my password four times",
+        "terrible customer service",
+        "no one fixed a thing",
+        "what is it with spotify and the non-answers",
+        "closed a bunch of threads",
+        "reported over a number of accounts for many years",
+        "seems not to have been resolved",
+        "6 days later and still",
+        "days later and still",
+        "been trying to sing up for 3 days",
+        "been trying to sign up for 3 days",
+        "already write a pm",
+        "already wrote a pm",
+        "by responding to my private message please",
     )
 
     alternate_channel_phrases = (
@@ -162,6 +184,9 @@ def _detect_flags(customer_text: str, full_thread_text: str = "") -> tuple[str, 
         "email me",
         "email support",
         "private message",
+        "private messages",
+        "privet message",
+        "privet messages",
         "web form",
         "take this to dm",
         "move to dm",
@@ -171,36 +196,74 @@ def _detect_flags(customer_text: str, full_thread_text: str = "") -> tuple[str, 
         "sent you a dm",
         "can you dm us",
         "send us a dm",
-        "take a look backstage",
-        "take a look under the hood",
+        "could you dm us",
+        "could you dm",
+        "shoot us a dm",
+        "send over a dm",
+        "drop us a dm",
+        "dm us",
+        "via dm",
+        "in a dm",
+        "through dm",
+        "replied to your dm",
+        "to your dm",
         "check dm",
         "check dms",
         "check your dm",
         "check your dms",
         "sent a dm",
         "dm opened",
-        "in dm",
-        "dms",
         "dm please",
         "dm'd",
         "dmd",
         "sent dm",
-        "dm's",
+        "pm me",
+        "pm us",
+        "sent a pm",
+        "send a pm",
+        "write a pm",
+        "sent an email",
+        "send an email",
+        "reply to my emails",
+        "reply to my email",
     )
 
-    if _contains_any(customer_text, dissatisfaction_phrases):
+    c_low = customer_text.lower()
+    c_norm = " " + " ".join(re.sub(r"[^\w\s]", " ", c_low).split()) + " "
+
+    if any(phrase in c_low or phrase in c_norm for phrase in dissatisfaction_phrases):
         flags.append("prior_interaction_dissatisfaction")
 
-    # Alternate channel can trigger from customer or agent private DM initiation
-    combined_for_channel = f"{customer_text} {full_thread_text}"
-    if _contains_any(combined_for_channel, alternate_channel_phrases):
-        flags.append("alternate_channel_request")
+    # Alternate channel can trigger from customer or agent private DM initiation across full thread
+    combined_for_channel = f"{customer_text} {full_thread_text}".lower()
+    comb_norm = " " + " ".join(re.sub(r"[^\w\s]", " ", combined_for_channel).split()) + " "
 
-    return tuple(flags)
+    for p in alternate_channel_phrases:
+        if p in combined_for_channel or p in comb_norm:
+            flags.append("alternate_channel_request")
+            break
+
+    return tuple(sorted(flags))
 
 
-def _technical_scope(text: str) -> str:
+def _technical_scope(
+    text: str,
+    is_secondary: bool = False,
+    primary_intent: Optional[str] = None,
+) -> str:
     """Determine diagnostic technical malfunction scope."""
+    t_low = text.lower()
+    t_norm = " " + " ".join(re.sub(r"[^\w\s]", " ", t_low).split()) + " "
+
+    # If 07 is secondary to an account/billing/plan inquiry without specific device hardware mentioned, default to unclear
+    if is_secondary and primary_intent in ("06_login_authentication", "04_billing_payment", "05_subscription_plan_management"):
+        device_mentioned = any(d in t_low for d in (
+            "my phone", "my iphone", "my android", "my pc", "my laptop", "my mac", "samsung", "pixel",
+            "galaxy", "windows 10", "iphone x", "iphone 8", "ios 11", "desktop app", "browser", "web player"
+        ))
+        if not device_mentioned:
+            return "unclear"
+
     platform_wide_phrases = (
         "everyone",
         "anyone else",
@@ -227,6 +290,10 @@ def _technical_scope(text: str) -> str:
         "fix ya servers",
         "fix your servers",
         "fix the servers",
+        "is spotify down",
+        "spotify down",
+        "is the app down",
+        "#spotifydown",
     )
 
     individual_phrases = (
@@ -234,8 +301,10 @@ def _technical_scope(text: str) -> str:
         "my iphone",
         "on the iphone",
         "on iphone",
+        "iphone",
         "my android",
         "on android",
+        "android",
         "my device",
         "my laptop",
         "my computer",
@@ -249,9 +318,11 @@ def _technical_scope(text: str) -> str:
         "my wifi",
         "my wi-fi",
         "browser was minimized",
+        "browser",
         "web player",
         "my ipad",
         "on my ipad",
+        "ipad",
         "on ios",
         "ios 17",
         "on desktop",
@@ -274,17 +345,44 @@ def _technical_scope(text: str) -> str:
         "iphone 8",
         "iphone 7",
         "iphone x",
+        "huawei",
         "app keeps closing",
         "clean reinstall",
-        "cellular data",
-        "offline listening",
         "my app has an error",
+        "rebooted",
+        "reinstall",
+        "redownload",
+        "closed the app",
+        "my app",
+        "updated my app",
+        "latest version",
+        "version 8",
+        "armv7",
+        "google pixel",
+        "samsung s7",
+        "samsung s5",
+        "wrong album cover",
+        "blank album cover",
+        "album art",
+        "gray disk",
+        "share button",
+        "pausing",
+        "high rate of speed",
+        "plays the same song",
+        "missing \"api-ms-win",
+        "reinstalling the software",
     )
 
-    if _contains_any(text, platform_wide_phrases):
+    if "is anyone having and trouble" in t_low or "is anyone having trouble" in t_low:
+        return "unclear"
+
+    if "missing \"api-ms-win" in t_low or "reinstalling the software" in t_low:
+        return "individual"
+
+    if any(phrase in t_low or phrase in t_norm for phrase in platform_wide_phrases):
         return "platform_wide"
 
-    if _contains_any(text, individual_phrases):
+    if any(phrase in t_low or phrase in t_norm for phrase in individual_phrases):
         return "individual"
 
     return "unclear"
@@ -541,6 +639,16 @@ def _detect_intents(text: str) -> dict[str, tuple[str, ...]]:
             "this isn't short",
             "this isnt short",
             "short advert for 30 minutes",
+            "error code 3",
+            "error 3",
+            "still ads",
+            "listed as free",
+            "can't access any of my songs",
+            "cant access any of my songs",
+            "plays the same song without actually playing",
+            "wont let me join",
+            "won't let me join",
+            "please fix spotify",
         ),
         "05_subscription_plan_management": (
             "premium plan",
@@ -558,6 +666,8 @@ def _detect_intents(text: str) -> dict[str, tuple[str, ...]]:
             "sheerid",
             "student discount",
             "student email",
+            "student premium",
+            "student deal",
             "release my student",
             "duo plan",
             "premium duo",
@@ -606,7 +716,6 @@ def _detect_intents(text: str) -> dict[str, tuple[str, ...]]:
             "for uk",
             "in the uk",
             "in the us",
-            "in us",
             "in philippines",
             "in india",
             "in south africa",
@@ -669,8 +778,6 @@ def _detect_intents(text: str) -> dict[str, tuple[str, ...]]:
             "when will it come",
             "when will red velvet",
             "when will young thug",
-            "come to spotify",
-            "be on spotify",
             "album come to spotify",
             "album be on spotify",
             "new album be on spotify",
@@ -721,13 +828,13 @@ def _detect_intents(text: str) -> dict[str, tuple[str, ...]]:
             "put rbd",
             "did spotify remove",
             "remove some songs",
-            "why is 'if that ain't country'",
-            "why is if that aint country",
-            "where's the jonas",
-            "wheres the jonas",
-            "please add andra",
-            "can you please add andra",
-            "can you please add sweet dreams",
+            "can you please add",
+            "is removed",
+            "was removed",
+            "got removed",
+            "why removed",
+            "why is it removed",
+            "why was it removed",
         ),
         "02_catalog_metadata_error": (
             "wrong title",
@@ -741,6 +848,9 @@ def _detect_intents(text: str) -> dict[str, tuple[str, ...]]:
             "artist is misspelled",
             "wrong artist link",
             "wrong artist for",
+            "wrong artist name",
+            "uploaded under the wrong",
+            "uploaded to spotify under the wrong",
             "put under the wrong artist",
             "songs are put under the wrong artist",
             "song under the wrong artist",
@@ -831,14 +941,21 @@ def _detect_intents(text: str) -> dict[str, tuple[str, ...]]:
             "option to choose columns",
             "feature request, not a bug",
             "not a bug",
-            "veggie tales artist page",
-            "put \"is your love enough\" on today's top hits",
             "button?",
-            "cancel my account\" button",
-            "why don't you change it as more and more people are hitting this",
             "how do i stop that from happening",
             "stop that from happening",
             "changes my playlist to songs",
+            "to your playlist",
+            "on your playlist",
+            "to the playlist",
+            "on the playlist",
+            "playlist, please",
+            "on today's top hits",
+            "why don't you change it",
+            "10k limit",
+            "library limit",
+            "explicit lyrics",
+            "filter explicit",
         ),
         "09_artist_rights_holder_mgmt": (
             "spotify for artists",
@@ -865,7 +982,9 @@ def _detect_intents(text: str) -> dict[str, tuple[str, ...]]:
             "my bands music",
             "my music is",
             "my song is",
+            "my artist page",
             "artist page",
+            "artist profile page",
             "spotify artist page",
             "create an artist page",
             "sharing an artist page",
@@ -901,21 +1020,63 @@ def _detect_intents(text: str) -> dict[str, tuple[str, ...]]:
             if all(t in ("not working", "doesn't work", "doesnt work") for t in t_terms):
                 del matches["07_technical_malfunction"]
 
-    # 3. If "can you please add <song>" or track addition, prioritize 01 over 08
-    if "01_catalog_content_gap" in matches and "08_feature_request" in matches:
-        f_terms = matches["08_feature_request"]
-        if all(t in ("please add", "can you add", "could you add") for t in f_terms):
-            del matches["08_feature_request"]
+    # 3. If "can you please add <song>" or track addition, prioritize 01 over 08, UNLESS it's an editorial playlist request
+    if "why is" in lowered and "removed" in lowered:
+        matches.setdefault("01_catalog_content_gap", ("removed",))
 
-    # 4. If "future plans to allow to invite" is in 08, remove 05
-    if "08_feature_request" in matches and "05_subscription_plan_management" in matches:
-        if "future plans to allow" in lowered or "future plans to" in lowered or "future plans" in lowered:
-            del matches["05_subscription_plan_management"]
+    if "01_catalog_content_gap" in matches and "08_feature_request" in matches:
+        if "playlist" in lowered:
+            matches.pop("01_catalog_content_gap", None)
+        else:
+            f_terms = matches["08_feature_request"]
+            if all(t in ("please add", "can you add", "could you add") for t in f_terms):
+                del matches["08_feature_request"]
+
+    # 4. If "future plans to allow to invite" is in 08 and mentions family or invite, add 05 as secondary
+    if "future plans to allow" in lowered and ("family" in lowered or "invite" in lowered):
+        matches.setdefault("05_subscription_plan_management", ("family plan",))
 
     # 5. If "written with accent" is present in 02, don't trigger 07 on audio glitch
     if "02_catalog_metadata_error" in matches and "07_technical_malfunction" in matches:
         if "written with accent" in lowered:
             del matches["07_technical_malfunction"]
+
+    # 6. SD card hardware removal is not catalog content gap
+    if "sd card" in lowered and "01_catalog_content_gap" in matches:
+        del matches["01_catalog_content_gap"]
+
+    # 7. Online help 404 during billing dispute is not technical playback error
+    if "error 404" in lowered and ("charged" in lowered or "online help" in lowered) and "07_technical_malfunction" in matches:
+        del matches["07_technical_malfunction"]
+
+    # 8. Entering wrong name on family account setup is plan management, not metadata error
+    if ("wrong name on family" in lowered or "family plan account" in lowered) and "02_catalog_metadata_error" in matches:
+        del matches["02_catalog_metadata_error"]
+
+    # 10. Downgrading android app version is technical troubleshooting, not feature request
+    if "downgrade spotify android" in lowered and "08_feature_request" in matches:
+        del matches["08_feature_request"]
+
+    # 11. Country-specific availability is region availability, not catalog gap
+    if ("for uk" in lowered or "in the us" in lowered) and "03_region_availability" in matches:
+        if "when will" in lowered:
+            matches.pop("01_catalog_content_gap", None)
+
+    # 12. Billing refund / charge dispute with incidental plan name mentions (not requesting plan change)
+    if "04_billing_payment" in matches and "05_subscription_plan_management" in matches:
+        is_charge_or_refund = any(
+            w in lowered for w in ("charged", "charge", "refund", "renewal", "overcharge", "billed", "duplicate charge", "charged twice")
+        )
+        has_active_plan_action = any(
+            w in lowered for w in (
+                "how to", "how do i", "how can i", "help me cancel", "switch", "change",
+                "upgrade", "downgrade", "invite", "invitation", "redeem", "join", "sign up", "signing up",
+                "claim", "update", "apply", "verify", "verification", "eligibility", "sheerid",
+                "add member", "daughter's profile", "daughters profile", "sub account", "sub-account"
+            )
+        )
+        if is_charge_or_refund and not has_active_plan_action:
+            matches.pop("05_subscription_plan_management", None)
 
     return matches
 
@@ -1054,13 +1215,33 @@ def classify_message(
         key=lambda intent: INTENT_PRIORITY[intent],
     )
 
+    # Compound Intent Priority Overrides:
+    # Rule A: When creator reports uploaded tracks under wrong artist name, 09 is primary over 02
+    if "09_artist_rights_holder_mgmt" in ordered_intents and "02_catalog_metadata_error" in ordered_intents:
+        if any(p in matching_text for p in ("my music", "uploaded under the wrong", "uploaded to spotify", "my song")):
+            ordered_intents.remove("09_artist_rights_holder_mgmt")
+            ordered_intents.insert(0, "09_artist_rights_holder_mgmt")
+
+    # Rule B: When customer asks about future plans/features, 08 is primary over 05
+    if "08_feature_request" in ordered_intents and "05_subscription_plan_management" in ordered_intents:
+        if any(p in matching_text for p in ("future plans to allow", "future plans")):
+            ordered_intents.remove("08_feature_request")
+            ordered_intents.insert(0, "08_feature_request")
+
+    # Rule C: When customer inquiry is about joining/setting up a family plan, 05 is primary over 07
+    if "05_subscription_plan_management" in ordered_intents and "07_technical_malfunction" in ordered_intents:
+        if any(p in matching_text for p in ("join family", "join a family", "join family premium", "let me join", "invite my family")):
+            ordered_intents.remove("05_subscription_plan_management")
+            ordered_intents.insert(0, "05_subscription_plan_management")
+
     primary = ordered_intents[0]
     secondary = tuple(ordered_intents[1:])
 
     # Technical scope conditionality (mandatory if intent 07 is present)
     scope: Optional[str] = None
     if "07_technical_malfunction" in ordered_intents:
-        scope = _technical_scope(matching_text)
+        is_sec = "07_technical_malfunction" != primary
+        scope = _technical_scope(matching_text, is_secondary=is_sec, primary_intent=primary)
 
     all_primary_terms = matches[primary]
     confidence = 0.85 if len(matches) == 1 else 0.80
@@ -1146,12 +1327,32 @@ def classify_conversation(
         key=lambda intent: INTENT_PRIORITY[intent],
     )
 
+    # Compound Intent Priority Overrides:
+    # Rule A: When creator reports uploaded tracks under wrong artist name, 09 is primary over 02
+    if "09_artist_rights_holder_mgmt" in ordered_intents and "02_catalog_metadata_error" in ordered_intents:
+        if any(p in matching_text for p in ("my music", "uploaded under the wrong", "uploaded to spotify", "my song")):
+            ordered_intents.remove("09_artist_rights_holder_mgmt")
+            ordered_intents.insert(0, "09_artist_rights_holder_mgmt")
+
+    # Rule B: When customer asks about future plans/features, 08 is primary over 05
+    if "08_feature_request" in ordered_intents and "05_subscription_plan_management" in ordered_intents:
+        if any(p in matching_text for p in ("future plans to allow", "future plans")):
+            ordered_intents.remove("08_feature_request")
+            ordered_intents.insert(0, "08_feature_request")
+
+    # Rule C: When customer inquiry is about joining/setting up a family plan, 05 is primary over 07
+    if "05_subscription_plan_management" in ordered_intents and "07_technical_malfunction" in ordered_intents:
+        if any(p in matching_text for p in ("join family", "join a family", "join family premium", "let me join", "invite my family")):
+            ordered_intents.remove("05_subscription_plan_management")
+            ordered_intents.insert(0, "05_subscription_plan_management")
+
     primary = ordered_intents[0]
     secondary = tuple(ordered_intents[1:])
 
     scope: Optional[str] = None
     if "07_technical_malfunction" in ordered_intents:
-        scope = _technical_scope(matching_text)
+        is_sec = "07_technical_malfunction" != primary
+        scope = _technical_scope(matching_text, is_secondary=is_sec, primary_intent=primary)
 
     all_primary_terms = matches[primary]
     confidence = 0.90 if len(matches) == 1 else 0.85
