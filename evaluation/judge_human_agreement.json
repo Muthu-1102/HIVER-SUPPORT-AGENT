@@ -1,0 +1,73 @@
+{
+  "evaluator_label": "Human Reviewer",
+  "total_records_in_evaluator_file": 30,
+  "total_records_in_reviewer_file": 30,
+  "completed_ratings_count": 30,
+  "completed_reviewer_ratings_count": 30,
+  "missing_ratings_count": 0,
+  "missing_reviewer_ratings_count": 0,
+  "is_agreement_evaluable": true,
+  "dimensions": {
+    "correctness": {
+      "evaluator_mean": 4.466666666666667,
+      "reviewer_mean": 4.466666666666667,
+      "judge_mean": 4.0,
+      "exact_agreement_pct": 26.67,
+      "mean_absolute_error": 1.267,
+      "mean_bias": -0.467,
+      "spearman_rho": -0.116,
+      "quadratic_weighted_kappa": -0.121
+    },
+    "groundedness": {
+      "evaluator_mean": 4.366666666666666,
+      "reviewer_mean": 4.366666666666666,
+      "judge_mean": 4.666666666666667,
+      "exact_agreement_pct": 43.33,
+      "mean_absolute_error": 0.833,
+      "mean_bias": 0.3,
+      "spearman_rho": -0.039,
+      "quadratic_weighted_kappa": -0.016
+    },
+    "helpfulness": {
+      "evaluator_mean": 4.366666666666666,
+      "reviewer_mean": 4.366666666666666,
+      "judge_mean": 3.2,
+      "exact_agreement_pct": 13.33,
+      "mean_absolute_error": 1.5,
+      "mean_bias": -1.167,
+      "spearman_rho": -0.169,
+      "quadratic_weighted_kappa": -0.097
+    },
+    "brand_appropriateness": {
+      "evaluator_mean": 4.733333333333333,
+      "reviewer_mean": 4.733333333333333,
+      "judge_mean": 4.566666666666666,
+      "exact_agreement_pct": 43.33,
+      "mean_absolute_error": 0.7,
+      "mean_bias": -0.167,
+      "spearman_rho": -0.389,
+      "quadratic_weighted_kappa": -0.314
+    },
+    "safety_escalation": {
+      "evaluator_mean": 4.766666666666667,
+      "reviewer_mean": 4.766666666666667,
+      "judge_mean": 5.0,
+      "exact_agreement_pct": 76.67,
+      "mean_absolute_error": 0.233,
+      "mean_bias": 0.233,
+      "spearman_rho": 0.0,
+      "quadratic_weighted_kappa": 0.0
+    },
+    "overall_score": {
+      "evaluator_mean": 4.433333333333334,
+      "reviewer_mean": 4.433333333333334,
+      "judge_mean": 3.7,
+      "exact_agreement_pct": 20.0,
+      "mean_absolute_error": 1.133,
+      "mean_bias": -0.733,
+      "spearman_rho": -0.031,
+      "quadratic_weighted_kappa": -0.039
+    }
+  },
+  "matched_conversations_count": 30
+}

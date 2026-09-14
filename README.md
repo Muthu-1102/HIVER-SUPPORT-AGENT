@@ -20,7 +20,7 @@ The system orchestrates multi-turn conversation parsing, frozen-taxonomy intent 
 10. [Top 5 Failure Modes](#10-top-5-failure-modes)
 11. [What is Misleading About My Headline Number?](#11-what-is-misleading-about-my-headline-number)
 12. [Qualitative Unseen Holdout Evaluation](#12-qualitative-unseen-holdout-evaluation)
-13. [LLM-as-a-Judge Reply Quality & Independent-Reviewer Agreement](#13-llm-as-a-judge-reply-quality--independent-reviewer-agreement)
+13. [LLM-as-a-Judge Reply Quality & Evaluator Agreement](#13-llm-as-a-judge-reply-quality--evaluator-agreement)
 14. [What I'd Do Next with One More Week](#14-what-id-do-next-with-one-more-week)
 15. [Decision Log](#15-decision-log)
 16. [Known Limitations](#16-known-limitations)
@@ -218,24 +218,24 @@ Forensic analysis of the 12 residual discrepancies in [evaluation/step8_error_an
 
 ## 11. What is Misleading About My Headline Number?
 
-Our canonical evaluation reports a **94.00% Full-Record Exact Match** and **100.00% Primary Intent Accuracy** on the 200-conversation gold benchmark. While this confirms pipeline determinism and rule precision against the gold standard, **this number must not be interpreted as an index of universal real-world support quality.**
+Our canonical evaluation reports a **94.00% Full-Record Exact Match** and **100.00% Primary Intent Accuracy** on the 200-conversation gold benchmark. While this confirms pipeline determinism and rule precision against the gold standard, **this headline number must not be interpreted as universal real-world support quality.**
 
 Four critical distinctions explain why:
 
-### 1. Strict Benchmark Exactness vs. Real-World Task Completion
-The 94% metric measures exact multi-attribute alignment across five schema dimensions (Primary Intent, Secondary Intents, Scope, Cross-Cutting Flags, and Non-Intent) on a structured, pre-curated dataset. It does not measure customer issue resolution time, first-contact resolution (FCR), or customer satisfaction (CSAT).
+### 1. Benchmark Exactness vs. End-to-End Customer Satisfaction
+The 94% metric measures exact multi-attribute classification alignment across five structured schema dimensions (Primary Intent, Secondary Intents, Scope, Cross-Cutting Flags, Non-Intent) on pre-curated data. It is a routing precision metric, not a measure of end-to-end customer issue resolution or satisfaction (CSAT).
 
-### 2. Gold Benchmark Stratification & Annotation Boundaries
-The 200-record gold benchmark was sampled with balanced intent stratification across clear support topics. Real-world social streams are far less orderly: users post fragmented thoughts across multiple tweets, use heavy sarcasm, or change topics mid-thread. Furthermore, 12 of our discrepancies reflect annotator boundary nuances (e.g. DM link flagging), indicating that the benchmark has inherent label ambiguity.
+### 2. Annotation Boundaries & Artifact Cleanliness
+The 200-record gold set represents clean, reconstructed threads with curated context. Real-world support channels receive unstructured, fragmented, or sarcastic inputs where intent boundaries blur. Our 12 residual discrepancies reflect annotator boundary nuances (e.g., DM link flagging), illustrating that benchmark labels contain inherent human subjectivity.
 
 ### 3. Generalization Gap Exposed by Unseen Holdout Data
-When tested on 50 completely unseen raw conversations from the wider corpus ([scripts/evaluate_holdout.py](scripts/evaluate_holdout.py)), **72% of records were classified as `insufficient_information`**. In the wild, customers frequently tweet single words, tag `@SpotifyCares` without context, or post emotional vents. A 94% exact match on clean benchmark inquiries does not mean the system will autonomously solve 94% of raw social mentions.
+When tested on 50 completely unseen raw conversations ([scripts/evaluate_holdout.py](scripts/evaluate_holdout.py)), **72% were classified as `insufficient_information`**. In the wild, customers often post single words, emojis, or vague vents requiring clarification. High benchmark exactness on clean queries does not mean the system resolves 94% of uncurated social traffic.
 
-### 4. Generative Response Quality & The LLM Judge Leniency Gap
-Classification accuracy does not equate to response quality. While the pipeline routes accurately, generating empathetic, context-aware responses is subjective. In our 30-conversation evaluation:
-- The LLM judge (`openai/gpt-oss-120b`) gave an average overall score of **3.70 / 5.00**.
-- The Independent Reviewer gave an average overall score of **2.70 / 5.00**.
-- This **+1.00 Mean Bias** demonstrates that automated judges are lenient and that automated routing success does not guarantee human-grade conversational support.
+### 4. LLM Judge Disagreement with Human Quality Ratings
+High classification accuracy does not guarantee natural response quality. In our 30-conversation evaluation, LLM-judge scores were **not validated by human ratings**:
+- The human reviewer gave an average overall score of **4.43 / 5.00**, while the LLM judge scored **3.70 / 5.00** (Mean Bias: -0.733).
+- Quadratic Weighted Kappa between judge and human ratings is **$\le 0$ across all rubric dimensions** (Overall QWK: -0.039).
+- The observed judge-human disagreement shows that automated judge ratings should not be treated as ground-truth customer quality measurements; they are best reported as an automated qualitative signal alongside human evaluation.
 
 ---
 
@@ -252,72 +252,58 @@ To verify pipeline generalization on completely unseen data without benchmark co
 
 ---
 
-## 13. LLM-as-a-Judge Reply Quality & Independent-Reviewer Agreement
+## 13. LLM-as-a-Judge Reply Quality & Evaluator Agreement
 
 ### 13.1 Why an LLM Judge?
 
 While deterministic classification metrics (accuracy, precision, recall) measure routing correctness against gold labels, customer-facing response generation is open-ended. Exact string matching (e.g. BLEU/ROUGE) fails to capture semantic correctness, tone, helpfulness, and safety.
 
-An **LLM-as-a-judge** pipeline provides automated, multi-dimensional quality auditing through provider-configurable OpenAI-compatible endpoints. The completed comparison in this repository is against an **Independent Reviewer**, not a human-agreement study.
+An **LLM-as-a-judge** pipeline provides automated, multi-dimensional quality auditing through provider-configurable OpenAI-compatible endpoints. The system evaluates responses across 5 orthogonal dimensions scored from 1 (Unacceptable) to 5 (Exemplary).
 
 ### 13.2 Five-Dimension Reply Quality Rubric (1–5 Scale)
 
-Each response is evaluated across five orthogonal dimensions scored on an integer scale from 1 (Unacceptable) to 5 (Exemplary):
-
 | Dimension | Key Evaluation Criteria |
 |---|---|
-| **1. Correctness** (1–5) | Does the response accurately address the customer's true issue and avoid false or unsupported technical claims? |
-| **2. Groundedness** (1–5) | Is the response strictly grounded in the conversation context and authentic Spotify support policies without inventing non-existent features or links? |
-| **3. Helpfulness** (1–5) | Does the response provide clear, actionable troubleshooting steps or an unambiguous resolution path? |
-| **4. Brand Appropriateness** (1–5) | Is the tone empathetic, professional, concise, and aligned with `@SpotifyCares` social customer support style? |
-| **5. Safety & Escalation** (1–5) | Does the response avoid unsafe promises (e.g., unauthorized refunds), protect user privacy, and correctly route sensitive cases to private DMs or specialist human queues? |
-
-In addition to the five dimensions, the judge produces:
-- **`overall_score`** (1–5): Holistic response quality rating.
-- **`short_reason`**: A concise 1–2 sentence justification explaining the rating.
+| **1. Correctness** (1–5) | Does the response accurately address the customer's true issue and avoid false technical claims? |
+| **2. Groundedness** (1–5) | Is the response strictly grounded in authentic Spotify policies without inventing non-existent features? |
+| **3. Helpfulness** (1–5) | Does the response provide actionable troubleshooting steps or an unambiguous resolution path? |
+| **4. Brand Appropriateness** (1–5) | Is the tone empathetic, professional, concise, and aligned with `@SpotifyCares` social care style? |
+| **5. Safety & Escalation** (1–5) | Does the response avoid unsafe promises, protect privacy, and route sensitive cases to private DMs? |
 
 ### 13.3 Model & Provider Configuration
 
-The evaluation harness supports OpenAI-compatible chat completion endpoints from both **OpenRouter** and **Groq** via [src/spotify_agent/llm_judge.py](src/spotify_agent/llm_judge.py).
+The evaluation harness supports OpenAI-compatible endpoints from **OpenRouter** and **Groq** via [src/spotify_agent/llm_judge.py](src/spotify_agent/llm_judge.py).
 
 | Provider | Default Model | API Key Variable | Model Variable |
 |---|---|---|---|
 | **OpenRouter** (Default) | `meta-llama/llama-3.3-70b-instruct:free` | `OPENROUTER_API_KEY` | `OPENROUTER_MODEL` |
 | **Groq** | `openai/gpt-oss-120b` | `GROQ_API_KEY` | `GROQ_MODEL` |
 
-- **Security Invariant:** API keys are **strictly read from environment variables or local `.env`**. No credentials are ever hardcoded, logged, committed, or exposed in output files.
-- **Provider Switching:** Set `LLM_JUDGE_PROVIDER=openrouter` or `LLM_JUDGE_PROVIDER=groq` in `.env`, or pass `--provider groq` / `--provider openrouter` CLI flag.
+- **Security Invariant:** API keys are strictly read from environment variables or local `.env`. No credentials are ever hardcoded, logged, or exposed.
+- **Provider Switching:** Pass `--provider groq` or `--provider openrouter` CLI flag.
 
-### 13.4 Deterministic Evaluation Subset & Independent-Reviewer Protocol
+### 13.4 Deterministic Evaluation Subset & Evaluator Protocols
 
-- **Evaluation Subset:** $N=30$ conversations deterministically sampled from the 200 canonical gold conversations using a fixed random seed (`seed=42`).
-- **Complete LLM Judge Evaluation (Current Run):** Full 30-record evaluation saved in [evaluation/llm_judge_results_complete.jsonl](evaluation/llm_judge_results_complete.jsonl):
-  - **LLM Judge Evaluated Records:** **30 / 30**
-  - **Provider:** **Groq**
-  - **Model:** **`openai/gpt-oss-120b`**
-  - **Fallback Invocations:** **0** (0 fallbacks; all 30 records completed on primary model)
-  - **Failures / Errors:** **0**
-- **Independent Reviewer Ratings:** [evaluation/independent_reviewer_ratings.jsonl](evaluation/independent_reviewer_ratings.jsonl) contains **30 / 30** completed independent-reviewer ratings; [evaluation/independent_reviewer_ratings.json](evaluation/independent_reviewer_ratings.json) is its companion JSON artifact.
-- **Judge / Reviewer Overlap:** **30 / 30** (100% complete overlap across all 30 evaluated conversation IDs).
-- **Historical Interrupted Run:** [evaluation/llm_judge_results.jsonl](evaluation/llm_judge_results.jsonl) is the earlier interrupted 10-record run and is retained unchanged as a historical artifact.
-- **Human Review Materials & Agreement Disclaimer:** [evaluation/human_judge_ratings_template.jsonl](evaluation/human_judge_ratings_template.jsonl) and [evaluation/human_judge_review.md](evaluation/human_judge_review.md) contain the 30-record blank evaluation materials. **Actual human-agreement evidence was not established** (human rating scores remain unpopulated/null). The reported agreement is strictly **Independent-Reviewer Agreement**, NOT human ground-truth evidence.
-- **Integrity Rule:** The repository does not fabricate ratings or impute missing values.
+- **Evaluation Subset:** $N=30$ conversations deterministically sampled from the 200 canonical gold conversations (`seed=42`).
+- **Complete LLM Judge Evaluation (Current Run):** Saved in [evaluation/llm_judge_results_complete.jsonl](evaluation/llm_judge_results_complete.jsonl) (30/30 evaluated on Groq `openai/gpt-oss-120b`, 0 fallbacks, 0 failures).
+- **Independent Reviewer Ratings:** [evaluation/independent_reviewer_ratings.jsonl](evaluation/independent_reviewer_ratings.jsonl) contains 30 completed independent baseline ratings.
+- **Completed Human Reviewer Ratings:** [evaluation/human_judge_ratings.jsonl](evaluation/human_judge_ratings.jsonl) contains 30 completed human ratings scored across all six rubric fields.
+- **Template & Blank Review Sheet:** [evaluation/human_judge_ratings_template.jsonl](evaluation/human_judge_ratings_template.jsonl) and [evaluation/human_judge_review.md](evaluation/human_judge_review.md) preserve the original unrated templates.
+- **Historical Interrupted Run:** [evaluation/llm_judge_results.jsonl](evaluation/llm_judge_results.jsonl) retains the earlier 10-record run unchanged.
 
 ### 13.5 Evaluation Resumption, Rate Limits & Fallbacks
 
-The evaluator supports safe continuation of an interrupted run through `--resume-from`. Existing completed conversation IDs are skipped and copied unchanged into the staging output; only missing records are sent to the API. The historical [evaluation/llm_judge_results.jsonl](evaluation/llm_judge_results.jsonl) remains unchanged. For example, the completed run was executed with:
+The evaluator supports continuation via `--resume-from`. Existing completed IDs are skipped and copied into staging output without re-calling APIs:
 
 ```powershell
 python scripts/evaluate_llm_judge.py --provider groq --resume-from evaluation/llm_judge_results.jsonl --output evaluation/llm_judge_results_complete.jsonl
 ```
 
-Requests use an 8-second default pacing delay. HTTP 429 responses inspect `Retry-After` and `x-ratelimit-reset-requests`, and retry timing uses the upstream reset information when available.
+Requests use an 8-second pacing delay and inspect upstream `Retry-After` / rate-limit headers. For Groq, the primary model is `openai/gpt-oss-120b` and the fallback is `openai/gpt-oss-20b`.
 
-For Groq, the primary model is `openai/gpt-oss-120b` and the fallback model is `openai/gpt-oss-20b`. The fallback is attempted only after the configured primary-model retry behavior fails. Each result records the provider, model, `fallback_used`, and `attempts`. In the completed 30-record run, all records used the primary model, with zero fallbacks.
+### 13.6 Independent-Reviewer Agreement Metrics (30/30 Overlap)
 
-### 13.6 Agreement Metrics (Complete 30/30 Overlap)
-
-The comparison harness ([scripts/compare_judge_human.py](scripts/compare_judge_human.py)) aligns independent-reviewer and LLM-judge ratings by `conversation_id`. With both the complete 30-record judge file ([evaluation/llm_judge_results_complete.jsonl](evaluation/llm_judge_results_complete.jsonl)) and 30 completed independent-reviewer ratings ([evaluation/independent_reviewer_ratings.jsonl](evaluation/independent_reviewer_ratings.jsonl)), the agreement report ([evaluation/judge_reviewer_agreement.json](evaluation/judge_reviewer_agreement.json)) computes metrics across all **30 / 30 overlapping pairs**:
+Evaluated via [scripts/compare_judge_human.py](scripts/compare_judge_human.py) comparing [evaluation/llm_judge_results_complete.jsonl](evaluation/llm_judge_results_complete.jsonl) against [evaluation/independent_reviewer_ratings.jsonl](evaluation/independent_reviewer_ratings.jsonl) ([evaluation/judge_reviewer_agreement.json](evaluation/judge_reviewer_agreement.json)):
 
 | Rubric Dimension | Reviewer Mean | Judge Mean | Exact Agreement (%) | MAE | Mean Bias | Spearman $\rho$ | Quadratic Weighted Kappa (QWK) |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
@@ -328,18 +314,30 @@ The comparison harness ([scripts/compare_judge_human.py](scripts/compare_judge_h
 | **Safety & Escalation** | 3.93 | 5.00 | 3.33% | 1.067 | +1.067 | 0.000 | 0.000 |
 | **Overall Score** | 2.70 | 3.70 | 20.00% | 1.067 | +1.000 | 0.535 | 0.373 |
 
-- **Exact Agreement Rate (%)**: Percentage of identical scores ($Score_{Reviewer} == Score_{Judge}$).
-- **Mean Absolute Error (MAE)**: $\frac{1}{N}\sum |Score_{Reviewer} - Score_{Judge}|$.
-- **Mean Bias Error**: Average directional skew ($Score_{Judge} - Score_{Reviewer}$). A positive value indicates the judge was more lenient than the independent reviewer.
-- **Spearman Rank Correlation ($\rho$)**: Rank-order agreement across ordinal ratings (0.535 on overall score).
-- **Quadratic Weighted Kappa (QWK)**: Standard inter-rater reliability metric penalizing large score disagreements quadratically (0.373 on overall score).
+### 13.7 Human Agreement Check (30/30 Overlap)
 
-### 13.7 Limitations of LLM-as-a-Judge
+To test whether LLM-as-a-judge ratings align with actual human quality assessments, all 30 conversations were independently evaluated by a human reviewer ([evaluation/human_judge_ratings.jsonl](evaluation/human_judge_ratings.jsonl)). The 1-to-1 agreement report was computed via [scripts/compare_judge_human.py](scripts/compare_judge_human.py) and stored in [evaluation/judge_human_agreement.json](evaluation/judge_human_agreement.json):
 
-1. **Prompt & Format Sensitivity:** Small phrasing changes in rubric definitions can shift score calibration.
-2. **Verbosity & Politeness Bias:** LLMs may favor overly wordy responses unless strictly prompted to value concise social-care responses.
-3. **Reviewer-Judge Leniency Gap:** The LLM judge (`openai/gpt-oss-120b`) scored higher on average than the independent reviewer across all dimensions (Judge Overall Mean: 3.70 vs. Reviewer Overall Mean: 2.70; Mean Bias: +1.00), demonstrating a consistent leniency differential.
-4. **No Human Agreement Result:** The repository provides blank human-review materials, but no completed human ratings; the reported agreement is strictly with the independent reviewer, and no claim of human ground-truth evidence is made.
+| Rubric Dimension | Human Mean | Judge Mean | Exact Agreement (%) | MAE | Mean Bias (Judge − Human) | Spearman $\rho$ | Quadratic Weighted Kappa (QWK) |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| **Correctness** | 4.47 | 4.00 | 26.67% | 1.267 | -0.467 | -0.116 | -0.121 |
+| **Groundedness** | 4.37 | 4.67 | 43.33% | 0.833 | +0.300 | -0.039 | -0.016 |
+| **Helpfulness** | 4.37 | 3.20 | 13.33% | 1.500 | -1.167 | -0.169 | -0.097 |
+| **Brand Appropriateness** | 4.73 | 4.57 | 43.33% | 0.700 | -0.167 | -0.389 | -0.314 |
+| **Safety & Escalation** | 4.77 | 5.00 | 76.67% | 0.233 | +0.233 | 0.000 | 0.000 |
+| **Overall Score** | 4.43 | 3.70 | 20.00% | 1.133 | -0.733 | -0.031 | -0.039 |
+
+#### Key Findings from Human Agreement Analysis:
+1. **Weak Overall Agreement:** Quadratic Weighted Kappa is near zero or negative across all dimensions (Overall QWK: -0.039), indicating weak agreement between the LLM judge and human ratings. Spearman rank correlations are also near zero or negative across the dimensions, so the judge did not show meaningful rank-order alignment with this human sample.
+2. **Helpfulness & Overall Under-Scoring:** The LLM judge substantially under-scores helpfulness (Judge: 3.20 vs. Human: 4.37, Bias: -1.167) and overall quality (Judge: 3.70 vs. Human: 4.43, Bias: -0.733) relative to the human reviewer.
+3. **Safety Metric Ceiling:** Safety achieved the highest exact agreement (76.67%), but QWK is 0.000 because both evaluators assigned near-uniform top scores (Human: 4.77, Judge: 5.00) with minimal rank variance.
+4. **Methodological Takeaway:** The LLM judge should **NOT be presented as a validated surrogate for human quality measurement**. It is retained as a structured automated heuristic, while human evaluation remains the authoritative standard.
+
+### 13.8 Limitations of LLM-as-a-Judge
+
+1. **Prompt & Rubric Sensitivity:** Minor phrasing changes in rubric prompts create substantial scoring shifts.
+2. **Verbosity & Politeness Biases:** LLMs exhibit prompt-dependent length biases unless strictly constrained.
+3. **Disagreement with Human Judgments:** Empirical comparison against human evaluation reveals negative rank correlation (QWK = -0.039), confirming that LLM judges cannot substitute for human oversight.
 
 ---
 
@@ -348,16 +346,16 @@ The comparison harness ([scripts/compare_judge_human.py](scripts/compare_judge_h
 With an additional week of engineering time, I would focus on four high-impact architectural and evaluation enhancements:
 
 ### 1. Hybrid Small-LLM Fallback for Low-Confidence Triage
-- **Current Limitation:** The deterministic regex/keyword classifier runs in <2ms with 100% reproducibility, but routes 72% of raw social mentions to `insufficient_information` due to strict pattern matching.
-- **Next Step:** Implement a hybrid tiered classifier: high-confidence queries execute deterministically via the current rules; borderline or vague inquiries pass to a local or low-latency Small Language Model (e.g. Llama 3.3 8B or Mistral 7B) with few-shot prompt constraints to extract latent customer intent.
+- **Current Limitation:** The deterministic classifier runs in <2ms with 100% reproducibility, but routes 72% of raw social mentions to `insufficient_information` due to strict pattern matching.
+- **Next Step:** Implement a hybrid tiered classifier: high-confidence queries execute deterministically via rules; borderline or vague inquiries pass to a local Small Language Model (e.g. Llama 3.3 8B or Mistral 7B) with few-shot prompt constraints.
 
 ### 2. Multi-Author Graph Unrolling for Broadcast Outage Threads
-- **Current Limitation:** When `@SpotifyCares` posts a public status update, all incoming customer replies are parsed as a single monolithic conversation, creating multi-customer intent collisions.
-- **Next Step:** Build an author-segmented conversation disaggregator that partitions reply graphs by user ID, analyzing each customer's interaction branch as an isolated conversation unit.
+- **Current Limitation:** Public brand status updates merge hundreds of distinct customer replies into a single conversation graph, creating multi-customer intent collisions.
+- **Next Step:** Build an author-segmented disaggregator that partitions reply graphs by user ID, analyzing each customer's interaction branch as an isolated conversation unit.
 
-### 3. Empirical Human Evaluation Campaign
-- **Current Limitation:** Only independent-reviewer ratings are populated; the human evaluation template remains blank.
-- **Next Step:** Conduct a double-blind annotation study with 3+ professional customer support specialists across the 30-record review sheet ([evaluation/human_judge_review.md](evaluation/human_judge_review.md)). Calculate human-human vs. human-LLM Cohen's Kappa to formally calibrate judge leniency.
+### 3. Multi-Annotator Human Study & Judge Calibration
+- **Current Limitation:** Single human reviewer evaluation established weak LLM-judge agreement.
+- **Next Step:** Conduct a multi-annotator double-blind study with 3+ professional support agents across [evaluation/human_judge_review.md](evaluation/human_judge_review.md) to measure inter-human kappa and fine-tune judge prompt rubrics.
 
 ### 4. Live CRM Integration & Dynamic Knowledge Base RAG
 - **Current Limitation:** The response generator outputs structured action schemas and templated replies with static help links.
@@ -375,7 +373,7 @@ Key non-obvious engineering and design decisions made throughout project develop
 
 2. **Frozen Tier-3 Intent Hierarchy with Strict Priority Order (P0 to P8):**
    *Decision:* Defined 9 substantive intents arranged in strict priority (`06_login` > `04_billing` > `07_technical` > ... > `09_artist`).
-   *Rationale:* Multi-intent tweets (e.g., "I can't log in and was charged twice") must route to a single primary operational queue to prevent orphaned or duplicate tickets.
+   *Rationale:* Multi-intent tweets must route to a single primary operational queue to prevent orphaned or duplicate tickets.
 
 3. **Decoupling Substantive Intents from Non-Intent Classes:**
    *Decision:* Split classification into 9 core support intents and 3 non-intent triage categories (`insufficient_information`, `out_of_scope_non_support`, `no_action_acknowledgment_only`).
@@ -409,9 +407,9 @@ Key non-obvious engineering and design decisions made throughout project develop
     *Decision:* Kept the original interrupted run ([evaluation/llm_judge_results.jsonl](evaluation/llm_judge_results.jsonl)) intact and wrote the 30-record completed run to [evaluation/llm_judge_results_complete.jsonl](evaluation/llm_judge_results_complete.jsonl).
     *Rationale:* Maintains an immutable evaluation trail and ensures backward compatibility with test suites.
 
-11. **Transparent Independent-Reviewer Labeling:**
-    *Decision:* Explicitly labeled rating comparisons as "Independent Reviewer Agreement" and left human evaluation templates unpopulated.
-    *Rationale:* Prevents misrepresentation of independent baseline scores as verified human consensus.
+11. **Transparent Evaluator Labeling (Independent Reviewer vs. Human Reviewer):**
+    *Decision:* Separated independent reviewer ratings from human ratings, maintaining separate artifacts for each evaluation.
+    *Rationale:* Prevents conflation of automated or baseline reviewer scores with verified human evaluation.
 
 12. **Zero Live API Calls in Automated CI Test Suite:**
     *Decision:* Configured all 144 unit and integration tests to run offline using mocked HTTP responses and local fixtures.
@@ -489,7 +487,12 @@ Key non-obvious engineering and design decisions made throughout project develop
 
 - **Compare LLM Judge with Independent-Reviewer Ratings:**
   ```powershell
-  python scripts/compare_judge_human.py --judge-results evaluation/llm_judge_results_complete.jsonl --human-ratings evaluation/independent_reviewer_ratings.jsonl --output evaluation/judge_reviewer_agreement.json --evaluator-label "Independent Reviewer"
+  python scripts/compare_judge_human.py --judge-results evaluation/llm_judge_results_complete.jsonl --reviewer-ratings evaluation/independent_reviewer_ratings.jsonl --output evaluation/judge_reviewer_agreement.json --evaluator-label "Independent Reviewer"
+  ```
+
+- **Compare LLM Judge with Completed Human Reviewer Ratings:**
+  ```powershell
+  python scripts/compare_judge_human.py --judge-results evaluation/llm_judge_results_complete.jsonl --reviewer-ratings evaluation/human_judge_ratings.jsonl --output evaluation/judge_human_agreement.json --evaluator-label "Human Reviewer"
   ```
 
 ---
@@ -522,11 +525,13 @@ hiver-support-agent/
 │   ├── golden_set_results.json              # Canonical evaluation results & confusion matrix
 │   ├── golden_set_error_analysis.jsonl      # Record-by-record discrepancy breakdown
 │   ├── holdout_evaluation_results.json      # Qualitative holdout predictions (50 records)
-│   ├── human_judge_ratings_template.jsonl   # 30-record blank human evaluation template (unpopulated)
+│   ├── human_judge_ratings_template.jsonl   # 30-record blank human evaluation template
 │   ├── human_judge_review.md                # 30-record blank human review sheet
+│   ├── human_judge_ratings.jsonl            # 30 completed human reviewer ratings
 │   ├── independent_reviewer_ratings.json    # JSON companion for 30 independent-reviewer ratings
 │   ├── independent_reviewer_ratings.jsonl   # 30 completed independent-reviewer ratings
-│   ├── judge_reviewer_agreement.json        # Full agreement report (30/30 overlapping pairs)
+│   ├── judge_reviewer_agreement.json        # Full agreement report (Judge vs Independent Reviewer)
+│   ├── judge_human_agreement.json           # Full agreement report (Judge vs Human Reviewer)
 │   ├── llm_judge_results.jsonl              # Historical 10-record run (interrupted, retained unchanged)
 │   ├── llm_judge_results_complete.jsonl     # Complete 30-record Groq run (`openai/gpt-oss-120b`, 0 fallbacks)
 │   └── step8_error_analysis.md              # Systematic error analysis report
