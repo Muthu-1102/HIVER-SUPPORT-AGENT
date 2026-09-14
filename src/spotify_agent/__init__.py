@@ -48,6 +48,16 @@ from src.spotify_agent.agent import (
     AgentResult,
     SpotifySupportAgent,
 )
+from src.spotify_agent.llm_judge import (
+    DEFAULT_GROQ_MODEL,
+    DEFAULT_OPENROUTER_MODEL,
+    RUBRIC_DIMENSIONS,
+    JudgeScore,
+    evaluate_response,
+    parse_judge_response,
+    resolve_judge_config,
+    validate_judge_score_dict,
+)
 
 __all__ = [
     "Classification",
@@ -86,4 +96,12 @@ __all__ = [
     "generate_response",
     "AgentResult",
     "SpotifySupportAgent",
+    "DEFAULT_OPENROUTER_MODEL",
+    "DEFAULT_GROQ_MODEL",
+    "RUBRIC_DIMENSIONS",
+    "JudgeScore",
+    "evaluate_response",
+    "parse_judge_response",
+    "resolve_judge_config",
+    "validate_judge_score_dict",
 ]

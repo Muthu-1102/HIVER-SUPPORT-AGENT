@@ -17,10 +17,11 @@ The system orchestrates multi-turn conversation parsing, frozen-taxonomy intent 
 7. [Agent Architecture & Pipeline](#7-agent-architecture--pipeline)
 8. [Canonical Evaluation Results](#8-canonical-evaluation-results)
 9. [Qualitative Unseen Holdout Evaluation](#9-qualitative-unseen-holdout-evaluation)
-10. [Known Limitations](#10-known-limitations)
-11. [Setup & Reproducibility](#11-setup--reproducibility)
-12. [Repository Structure](#12-repository-structure)
-13. [Dataset Acquisition & Licensing](#13-dataset-acquisition--licensing)
+10. [LLM-as-a-Judge Reply Quality & Independent-Reviewer Agreement](#10-llm-as-a-judge-reply-quality--independent-reviewer-agreement)
+11. [Known Limitations](#11-known-limitations)
+12. [Setup & Reproducibility](#12-setup--reproducibility)
+13. [Repository Structure](#13-repository-structure)
+14. [Dataset Acquisition & Licensing](#14-dataset-acquisition--licensing)
 
 ---
 
@@ -186,7 +187,70 @@ To verify pipeline generalization on completely unseen data without benchmark co
 
 ---
 
-## 10. Known Limitations
+## 10. LLM-as-a-Judge Reply Quality & Independent-Reviewer Agreement
+
+### 10.1 Why an LLM Judge?
+
+While deterministic classification metrics (accuracy, precision, recall) measure routing correctness against gold labels, customer-facing response generation is open-ended. Exact string matching (e.g. BLEU/ROUGE) fails to capture semantic correctness, tone, helpfulness, and safety.
+
+An **LLM-as-a-judge** pipeline provides automated, multi-dimensional quality auditing through provider-configurable OpenAI-compatible endpoints. The completed comparison in this repository is against an **Independent Reviewer**, not a human-agreement study.
+
+### 10.2 Five-Dimension Reply Quality Rubric (1–5 Scale)
+
+Each response is evaluated across five orthogonal dimensions scored on an integer scale from 1 (Unacceptable) to 5 (Exemplary):
+
+| Dimension | Key Evaluation Criteria |
+|---|---|
+| **1. Correctness** (1–5) | Does the response accurately address the customer's true issue and avoid false or unsupported technical claims? |
+| **2. Groundedness** (1–5) | Is the response strictly grounded in the conversation context and authentic Spotify support policies without inventing non-existent features or links? |
+| **3. Helpfulness** (1–5) | Does the response provide clear, actionable troubleshooting steps or an unambiguous resolution path? |
+| **4. Brand Appropriateness** (1–5) | Is the tone empathetic, professional, concise, and aligned with `@SpotifyCares` social customer support style? |
+| **5. Safety & Escalation** (1–5) | Does the response avoid unsafe promises (e.g., unauthorized refunds), protect user privacy, and correctly route sensitive cases to private DMs or specialist human queues? |
+
+In addition to the five dimensions, the judge produces:
+- **`overall_score`** (1–5): Holistic response quality rating.
+- **`short_reason`**: A concise 1–2 sentence justification explaining the rating.
+
+### 10.3 Model & Provider Configuration
+
+The evaluation harness supports OpenAI-compatible chat completion endpoints from both **OpenRouter** and **Groq** via [src/spotify_agent/llm_judge.py](src/spotify_agent/llm_judge.py).
+
+| Provider | Default Model | API Key Variable | Model Variable |
+|---|---|---|---|
+| **OpenRouter** (Default) | `meta-llama/llama-3.3-70b-instruct:free` | `OPENROUTER_API_KEY` | `OPENROUTER_MODEL` |
+| **Groq** | `openai/gpt-oss-120b` | `GROQ_API_KEY` | `GROQ_MODEL` |
+
+- **Security Invariant:** API keys are **strictly read from environment variables or local `.env`**. No credentials are ever hardcoded, logged, committed, or exposed in output files.
+- **Provider Switching:** Set `LLM_JUDGE_PROVIDER=openrouter` or `LLM_JUDGE_PROVIDER=groq` in `.env`, or pass `--provider groq` / `--provider openrouter` CLI flag.
+
+### 10.4 Deterministic Evaluation Subset & Independent-Reviewer Protocol
+
+- **Evaluation Subset:** $N=30$ conversations deterministically sampled from the 200 canonical gold conversations using a fixed random seed (`seed=42`).
+- **Unscored Human Template:** [evaluation/human_judge_ratings_template.jsonl](evaluation/human_judge_ratings_template.jsonl) and [evaluation/human_judge_review.md](evaluation/human_judge_review.md) contain the 30-record blank review materials. Human-agreement results have **not** been established.
+- **Independent Reviewer:** [evaluation/independent_reviewer_ratings.jsonl](evaluation/independent_reviewer_ratings.jsonl) contains 30 completed independent-reviewer ratings; [evaluation/independent_reviewer_ratings.json](evaluation/independent_reviewer_ratings.json) is its JSON companion artifact.
+- **Completed Judge Run:** [evaluation/llm_judge_results.jsonl](evaluation/llm_judge_results.jsonl) contains only 10 completed records. The live judge stopped at 10/30 because of the Groq provider rate limit. Every recorded judge result is from **Groq** using **`openai/gpt-oss-120b`**; no OpenRouter results were run, combined, or aggregated with these results.
+- **Integrity Rule:** The repository does not fabricate reviewer ratings or missing judge records.
+
+### 10.5 Agreement Metrics
+
+The comparison harness ([scripts/compare_judge_human.py](scripts/compare_judge_human.py)) aligns independent-reviewer and LLM-judge ratings by `conversation_id`. Although the reviewer completed 30 ratings, the agreement report ([evaluation/judge_reviewer_agreement.json](evaluation/judge_reviewer_agreement.json)) computes metrics only for the **10 overlapping IDs**; it does not impute the 20 missing judge ratings.
+
+- **Exact Agreement Rate (%)**: Percentage of identical scores ($Score_{Reviewer} == Score_{Judge}$).
+- **Mean Absolute Error (MAE)**: $\frac{1}{N}\sum |Score_{Reviewer} - Score_{Judge}|$.
+- **Mean Bias Error**: Average directional skew ($Score_{Judge} - Score_{Reviewer}$).
+- **Spearman Rank Correlation ($\rho$)**: Rank-order agreement across ordinal ratings.
+- **Quadratic Weighted Kappa (QWK)**: Standard inter-rater reliability metric penalizing large score disagreements quadratically.
+
+### 10.6 Limitations of LLM-as-a-Judge
+
+1. **Prompt & Format Sensitivity:** Small phrasing changes in rubric definitions can shift score calibration.
+2. **Verbosity & Politeness Bias:** LLMs may favor overly wordy responses unless strictly prompted to value concise social-care responses.
+3. **Partial Provider-Limited Run:** The saved live run contains 10 of 30 planned records because Groq rate-limited the request sequence. It is a Groq-only partial result and must not be treated as a 30-record result or combined with absent OpenRouter results.
+4. **No Human Agreement Result:** The repository has blank human-review materials, but no completed human ratings; the reported agreement is only with the independent reviewer.
+
+---
+
+## 11. Known Limitations
 
 1. **Twitter Broadcast Thread Merging:** Outage broadcast tweets merge hundreds of independent customer inquiries into single threads.
 2. **Terse / Vague Social Inquiries:** Single-word tweets or emojis without context cannot be classified into substantive intents without human follow-up.
@@ -194,7 +258,7 @@ To verify pipeline generalization on completely unseen data without benchmark co
 
 ---
 
-## 11. Setup & Reproducibility
+## 12. Setup & Reproducibility
 
 ### Environment Setup
 
@@ -211,7 +275,7 @@ To verify pipeline generalization on completely unseen data without benchmark co
 
 ### Execution Commands
 
-- **Run Test Suite (110 Tests):**
+- **Run Test Suite:**
   ```bash
   python -m pytest -q
   ```
@@ -237,9 +301,23 @@ To verify pipeline generalization on completely unseen data without benchmark co
   python scripts/demo_agent.py --interactive
   ```
 
+- **Run LLM-as-a-Judge Evaluation (OpenRouter or Groq):**
+  ```powershell
+  # Option A: Run with OpenRouter
+  python scripts/evaluate_llm_judge.py --provider openrouter
+
+  # Option B: Run with Groq
+  python scripts/evaluate_llm_judge.py --provider groq
+  ```
+
+- **Compare LLM Judge with Independent-Reviewer Ratings:**
+  ```powershell
+  python scripts/compare_judge_human.py --judge-results evaluation/llm_judge_results.jsonl --human-ratings evaluation/independent_reviewer_ratings.jsonl --output evaluation/judge_reviewer_agreement.json --evaluator-label "Independent Reviewer"
+  ```
+
 ---
 
-## 12. Repository Structure
+## 13. Repository Structure
 
 ```
 hiver-support-agent/
@@ -253,17 +331,26 @@ hiver-support-agent/
 │       ├── intent_classifier.py             # Deterministic 9-intent & non-intent classification
 │       ├── routing_engine.py                # Operational routing & escalation rules
 │       ├── response_generator.py            # Customer response generation
+│       ├── llm_judge.py                     # Provider-configurable LLM-as-a-judge quality evaluator
 │       └── agent.py                         # End-to-end orchestration pipeline
 ├── scripts/
 │   ├── demo_agent.py                        # Interactive CLI demo interface
 │   ├── evaluate_agent.py                    # Canonical gold evaluation harness (200 records)
 │   ├── evaluate_holdout.py                  # Qualitative unseen holdout evaluation harness (50 records)
+│   ├── evaluate_llm_judge.py                # LLM-as-judge evaluation harness (30 records)
+│   ├── compare_judge_human.py               # Judge vs. reviewer rating agreement engine
 │   ├── validate_gold_annotations.py         # Schema & referential integrity validator
 │   └── adjudicate_annotations.py            # Dual-annotation adjudication pipeline
 ├── evaluation/
 │   ├── golden_set_results.json              # Canonical evaluation results & confusion matrix
 │   ├── golden_set_error_analysis.jsonl      # Record-by-record discrepancy breakdown
 │   ├── holdout_evaluation_results.json      # Qualitative holdout predictions (50 records)
+│   ├── human_judge_ratings_template.jsonl   # 30-record blank human evaluation template
+│   ├── human_judge_review.md                # 30-record blank human review sheet
+│   ├── independent_reviewer_ratings.json    # JSON companion for independent-reviewer ratings
+│   ├── independent_reviewer_ratings.jsonl   # 30 completed independent-reviewer ratings
+│   ├── judge_reviewer_agreement.json        # Metrics for the 10 overlapping judge/reviewer IDs
+│   ├── llm_judge_results.jsonl              # Partial 10-record Groq run (`openai/gpt-oss-120b`)
 │   └── step8_error_analysis.md              # Systematic error analysis report
 ├── data/
 │   └── processed/
@@ -282,12 +369,13 @@ hiver-support-agent/
     ├── test_response_generator.py
     ├── test_spotify_agent.py
     ├── test_evaluate_agent.py
-    └── test_evaluate_holdout.py
+    ├── test_evaluate_holdout.py
+    └── test_llm_judge.py
 ```
 
 ---
 
-## 13. Dataset Acquisition & Licensing
+## 14. Dataset Acquisition & Licensing
 
 The raw Customer Support on Twitter dataset (`twcs.csv`) is hosted publicly on Kaggle.
 

@@ -27,6 +27,11 @@ wheels/
 venv/
 ENV/
 
+# Environment & Secret Variables
+.env
+.env.*
+!.env.example
+
 # Scratch & Temporary Analysis
 scratch/
 

@@ -1,0 +1,73 @@
+{
+  "evaluator_label": "Independent Reviewer",
+  "total_records_in_evaluator_file": 30,
+  "total_records_in_reviewer_file": 30,
+  "completed_ratings_count": 30,
+  "completed_reviewer_ratings_count": 30,
+  "missing_ratings_count": 0,
+  "missing_reviewer_ratings_count": 0,
+  "is_agreement_evaluable": true,
+  "dimensions": {
+    "correctness": {
+      "evaluator_mean": 2.7,
+      "reviewer_mean": 2.7,
+      "judge_mean": 4.7,
+      "exact_agreement_pct": 10.0,
+      "mean_absolute_error": 2.0,
+      "mean_bias": 2.0,
+      "spearman_rho": -0.077,
+      "quadratic_weighted_kappa": 0.004
+    },
+    "groundedness": {
+      "evaluator_mean": 2.9,
+      "reviewer_mean": 2.9,
+      "judge_mean": 4.7,
+      "exact_agreement_pct": 0.0,
+      "mean_absolute_error": 1.8,
+      "mean_bias": 1.8,
+      "spearman_rho": 0.591,
+      "quadratic_weighted_kappa": 0.241
+    },
+    "helpfulness": {
+      "evaluator_mean": 2.5,
+      "reviewer_mean": 2.5,
+      "judge_mean": 3.5,
+      "exact_agreement_pct": 20.0,
+      "mean_absolute_error": 1.0,
+      "mean_bias": 1.0,
+      "spearman_rho": 0.693,
+      "quadratic_weighted_kappa": 0.391
+    },
+    "brand_appropriateness": {
+      "evaluator_mean": 3.6,
+      "reviewer_mean": 3.6,
+      "judge_mean": 4.8,
+      "exact_agreement_pct": 0.0,
+      "mean_absolute_error": 1.2,
+      "mean_bias": 1.2,
+      "spearman_rho": 0.645,
+      "quadratic_weighted_kappa": 0.286
+    },
+    "safety_escalation": {
+      "evaluator_mean": 4.0,
+      "reviewer_mean": 4.0,
+      "judge_mean": 5.0,
+      "exact_agreement_pct": 10.0,
+      "mean_absolute_error": 1.0,
+      "mean_bias": 1.0,
+      "spearman_rho": 0.0,
+      "quadratic_weighted_kappa": 0.0
+    },
+    "overall_score": {
+      "evaluator_mean": 2.7,
+      "reviewer_mean": 2.7,
+      "judge_mean": 3.9,
+      "exact_agreement_pct": 20.0,
+      "mean_absolute_error": 1.2,
+      "mean_bias": 1.2,
+      "spearman_rho": 0.449,
+      "quadratic_weighted_kappa": 0.27
+    }
+  },
+  "matched_conversations_count": 10
+}
