@@ -12,9 +12,9 @@ The system orchestrates multi-turn conversation parsing, frozen-taxonomy intent 
 2. [Why SpotifyCares (Brand Selection Rationale)](#2-why-spotifycares-brand-selection-rationale)
 3. [Data & Conversation Reconstruction](#3-data--conversation-reconstruction)
 4. [Frozen Intent Taxonomy](#4-frozen-intent-taxonomy)
-5. [Canonical Gold Evaluation Set](#5-canonical-gold-evaluation-set)
+5. [Canonical Gold Evaluation Set & Methodology Disclosure](#5-canonical-gold-evaluation-set--methodology-disclosure)
 6. [Annotation Agreement & Adjudication](#6-annotation-agreement--adjudication)
-7. [Agent Architecture & Pipeline](#7-agent-architecture--pipeline)
+7. [Agent Architecture & Response Grounding](#7-agent-architecture--response-grounding)
 8. [Results vs. Baselines](#8-results-vs-baselines)
 9. [Canonical Evaluation Results](#9-canonical-evaluation-results)
 10. [Top 5 Failure Modes](#10-top-5-failure-modes)
@@ -89,13 +89,16 @@ The support agent operates on a frozen Tier-3 intent taxonomy detailed in [docs/
 
 ---
 
-## 5. Canonical Gold Evaluation Set
+## 5. Canonical Gold Evaluation Set & Methodology Disclosure
 
 The canonical gold evaluation dataset consists of **200 stratified conversations** located in [data/processed/golden_set_annotations.jsonl](data/processed/golden_set_annotations.jsonl), paired with raw input context in [data/processed/golden_set_candidates.jsonl](data/processed/golden_set_candidates.jsonl).
 
 ### Sampling Methodology
 - **Stratified Coverage:** Sampled across all 9 substantive intents, non-intent classes, single/multi-turn conversations, and outage threads.
 - **Referential Integrity:** Validated via [scripts/validate_gold_annotations.py](scripts/validate_gold_annotations.py) to guarantee schema compliance, unique IDs, and confidence tracking.
+
+> [!WARNING]
+> **Important evaluation caveat:** The 200-record gold set became a frozen regression/spec-compliance benchmark during iterative development, and classifier rules were refined against discrepancies found on this set. Therefore, the 100% primary accuracy and 94% full-record exact match should not be interpreted as unbiased out-of-sample generalization. A separate zero-overlap 50-record holdout is reported as a qualitative generalization check.
 
 ---
 
@@ -109,7 +112,7 @@ To ensure gold label reliability, a dual-annotation protocol was executed:
 
 ---
 
-## 7. Agent Architecture & Pipeline
+## 7. Agent Architecture & Response Grounding
 
 The agent is organized as a deterministic 4-stage pipeline orchestrated by `SpotifySupportAgent` in [src/spotify_agent/agent.py](src/spotify_agent/agent.py):
 
@@ -132,20 +135,22 @@ Customer Input (String or Thread Dict)
    │  • Determines human escalation & private channel handoff requirements
    ▼
 [4. Response Generator] (src/spotify_agent/response_generator.py)
-   │  • Generates concise, policy-compliant support responses
-   │  • Emits structured actions (e.g. security_escalation, collect_diagnostics)
+   │  • Emits policy-grounded replies and structured actions
    ▼
 AgentResult (Immutable composite containing ParsedConversation, Classification, Routing, Response)
 ```
+
+### Resolution Grounding vs. Runtime Retrieval
+The current response generator uses **curated policy and resolution templates derived from empirical patterns in the historical support corpus**, paired with structured action schemas (`action_type`, `escalate_to_human`, `suggested_links`). **Runtime retrieval/RAG over historical conversations was intentionally not built as an architectural design choice** to guarantee deterministic execution, zero latency overhead, and immunity to hallucinated URLs. Implementing vector-indexed retrieval over historical resolutions remains a logical next step.
 
 ---
 
 ## 8. Results vs. Baselines
 
-To benchmark classification performance, the final deterministic agent is compared against two historical reference baselines on the 200-conversation canonical gold evaluation set:
+To benchmark classification performance, the final deterministic agent is compared against two reference baselines on the 200-conversation canonical gold evaluation set:
 
 1. **Trivial Baseline (Majority Class Predictor):** Always predicts the most frequent class in the gold set (`07_technical_malfunction`, $N=35$). It emits default individual scope with no secondary intents or cross-cutting flags.
-2. **Simple Baseline (Step 8 Heuristic Matcher):** The early rule-based prototype before multi-intent category disambiguation and outage-thread handling was introduced (documented in [evaluation/step8_error_analysis.md](evaluation/step8_error_analysis.md)).
+2. **Simple Heuristic Baseline (pre-refinement):** The early rule-based prototype before multi-intent category disambiguation and outage-thread handling was introduced (documented in [evaluation/step8_error_analysis.md](evaluation/step8_error_analysis.md)). This represents an earlier deterministic version of the same overall rule-based approach, not an independently trained ML model.
 3. **Final Agent (Deterministic Multi-Stage Pipeline):** The current pipeline with priority-resolved classification, scope diagnostics, and flag extraction.
 
 ### Benchmark Comparison (Canonical Gold Set $N=200$)
@@ -153,10 +158,10 @@ To benchmark classification performance, the final deterministic agent is compar
 | Approach / Model | Primary Intent Accuracy | Secondary Intent Exact Match | Technical Malfunction Scope Accuracy | Cross-Cutting Flags Accuracy | Full-Record Exact Match |
 |---|:---:|:---:|:---:|:---:|:---:|
 | **Trivial Baseline** (Majority Class: `07_technical_malfunction`) | 17.50% (35/200) | 0.00% (0/200) | 17.50% (35/200) | 0.00% (0/200) | 0.00% (0/200) |
-| **Simple Baseline** (Step 8 Heuristic Matcher) | 91.00% (182/200) | 89.50% (179/200) | 88.50% (177/200) | 84.00% (168/200) | 67.00% (134/200) |
+| **Simple Heuristic Baseline (pre-refinement)** | 91.00% (182/200) | 89.50% (179/200) | 88.50% (177/200) | 84.00% (168/200) | 67.00% (134/200) |
 | **Final Agent** (Deterministic Pipeline) | **100.00%** (200/200) | **96.50%** (193/200) | **99.00%** (198/200) | **97.50%** (195/200) | **94.00%** (188/200) |
 
-*Note on Baseline Completeness:* Response generation quality metrics (1–5 rubric) and multi-intent latency benchmarks were not measured for the trivial or Step 8 heuristic baselines because those early iterations lacked decoupled routing engines and structured response generation modules.
+*Note on Baseline Completeness:* Response generation quality metrics (1–5 rubric) and multi-intent latency benchmarks were not measured for the trivial or pre-refinement heuristic baselines because those early iterations lacked decoupled routing engines and structured response generation modules.
 
 ---
 
@@ -225,14 +230,14 @@ Four critical distinctions explain why:
 ### 1. Benchmark Exactness vs. End-to-End Customer Satisfaction
 The 94% metric measures exact multi-attribute classification alignment across five structured schema dimensions (Primary Intent, Secondary Intents, Scope, Cross-Cutting Flags, Non-Intent) on pre-curated data. It is a routing precision metric, not a measure of end-to-end customer issue resolution or satisfaction (CSAT).
 
-### 2. Annotation Boundaries & Artifact Cleanliness
-The 200-record gold set represents clean, reconstructed threads with curated context. Real-world support channels receive unstructured, fragmented, or sarcastic inputs where intent boundaries blur. Our 12 residual discrepancies reflect annotator boundary nuances (e.g., DM link flagging), illustrating that benchmark labels contain inherent human subjectivity.
+### 2. Specification Benchmark Caveat & Iterative Development
+The 200-record gold set functioned as a regression and spec-compliance target during development. Classifier rules were iteratively tuned against discrepancies on this set. Consequently, 100% primary accuracy reflects high rule coverage against this benchmark rather than unbiased out-of-sample generalization.
 
 ### 3. Generalization Gap Exposed by Unseen Holdout Data
 When tested on 50 completely unseen raw conversations ([scripts/evaluate_holdout.py](scripts/evaluate_holdout.py)), **72% were classified as `insufficient_information`**. In the wild, customers often post single words, emojis, or vague vents requiring clarification. High benchmark exactness on clean queries does not mean the system resolves 94% of uncurated social traffic.
 
 ### 4. LLM Judge Disagreement with Human Quality Ratings
-High classification accuracy does not guarantee natural response quality. In our 30-conversation evaluation, LLM-judge scores were **not validated by human ratings**:
+High classification accuracy does not guarantee natural response quality. In our 30-conversation evaluation, LLM-judge scores were compared against completed human ratings, and the observed agreement was weak:
 - The human reviewer gave an average overall score of **4.43 / 5.00**, while the LLM judge scored **3.70 / 5.00** (Mean Bias: -0.733).
 - Quadratic Weighted Kappa between judge and human ratings is **$\le 0$ across all rubric dimensions** (Overall QWK: -0.039).
 - The observed judge-human disagreement shows that automated judge ratings should not be treated as ground-truth customer quality measurements; they are best reported as an automated qualitative signal alongside human evaluation.
@@ -247,7 +252,7 @@ To verify pipeline generalization on completely unseen data without benchmark co
 - **Holdout Sample:** 50 conversations deterministically sampled using fixed `seed=42`.
 - **Gold Overlap:** **0 records** (Strict zero-overlap invariant verified by unit test).
 - **Labeling Status:** **UNLABELED / QUALITATIVE ONLY**. No synthetic gold labels were created, and no accuracy metric is claimed for the holdout.
-- **Observed Holdout Distribution:** Predicted distribution and routing behavior observed on the qualitative holdout: 72% `insufficient_information` (unstructured social mentions and brief comments receiving standard clarification triage), 12% `07_technical_malfunction`, 8% `04_billing_payment`, 4% `01_catalog_content_gap`, 2% `03_region_availability`, 2% `08_feature_request`.
+- **Observed Holdout Distribution:** 72% `insufficient_information` (unstructured social mentions receiving standard clarification triage), 12% `07_technical_malfunction`, 8% `04_billing_payment`, 4% `01_catalog_content_gap`, 2% `03_region_availability`, 2% `08_feature_request`.
 - Detailed holdout outputs are tracked in [evaluation/holdout_evaluation_results.json](evaluation/holdout_evaluation_results.json).
 
 ---
@@ -256,9 +261,7 @@ To verify pipeline generalization on completely unseen data without benchmark co
 
 ### 13.1 Why an LLM Judge?
 
-While deterministic classification metrics (accuracy, precision, recall) measure routing correctness against gold labels, customer-facing response generation is open-ended. Exact string matching (e.g. BLEU/ROUGE) fails to capture semantic correctness, tone, helpfulness, and safety.
-
-An **LLM-as-a-judge** pipeline provides automated, multi-dimensional quality auditing through provider-configurable OpenAI-compatible endpoints. The system evaluates responses across 5 orthogonal dimensions scored from 1 (Unacceptable) to 5 (Exemplary).
+While deterministic classification metrics measure routing correctness against gold labels, customer-facing response generation is open-ended. An **LLM-as-a-judge** pipeline provides automated quality auditing across 5 orthogonal dimensions scored from 1 (Unacceptable) to 5 (Exemplary).
 
 ### 13.2 Five-Dimension Reply Quality Rubric (1–5 Scale)
 
@@ -272,20 +275,16 @@ An **LLM-as-a-judge** pipeline provides automated, multi-dimensional quality aud
 
 ### 13.3 Model & Provider Configuration
 
-The evaluation harness supports OpenAI-compatible endpoints from **OpenRouter** and **Groq** via [src/spotify_agent/llm_judge.py](src/spotify_agent/llm_judge.py).
+The evaluation harness supports OpenAI-compatible endpoints via [src/spotify_agent/llm_judge.py](src/spotify_agent/llm_judge.py).
 
-| Provider | Default Model | API Key Variable | Model Variable |
-|---|---|---|---|
-| **OpenRouter** (Default) | `meta-llama/llama-3.3-70b-instruct:free` | `OPENROUTER_API_KEY` | `OPENROUTER_MODEL` |
-| **Groq** | `openai/gpt-oss-120b` | `GROQ_API_KEY` | `GROQ_MODEL` |
-
-- **Security Invariant:** API keys are strictly read from environment variables or local `.env`. No credentials are ever hardcoded, logged, or exposed.
-- **Provider Switching:** Pass `--provider groq` or `--provider openrouter` CLI flag.
+- **Reported Run Configuration:** **Groq** using **`openai/gpt-oss-120b`** (completed 30/30 records, 0 fallbacks, 0 failures).
+- **Optional / Provider-Configurable Support:** OpenRouter is supported as a provider option via `--provider openrouter` CLI flag (e.g. `meta-llama/llama-3.3-70b-instruct:free`), though third-party free tier endpoints are not guaranteed to remain available.
+- **Security Invariant:** API keys are strictly read from environment variables (`GROQ_API_KEY`, `OPENROUTER_API_KEY`) or local `.env`. No credentials are ever hardcoded or exposed.
 
 ### 13.4 Deterministic Evaluation Subset & Evaluator Protocols
 
 - **Evaluation Subset:** $N=30$ conversations deterministically sampled from the 200 canonical gold conversations (`seed=42`).
-- **Complete LLM Judge Evaluation (Current Run):** Saved in [evaluation/llm_judge_results_complete.jsonl](evaluation/llm_judge_results_complete.jsonl) (30/30 evaluated on Groq `openai/gpt-oss-120b`, 0 fallbacks, 0 failures).
+- **Complete LLM Judge Evaluation (Reported Run):** Saved in [evaluation/llm_judge_results_complete.jsonl](evaluation/llm_judge_results_complete.jsonl) (30/30 evaluated on Groq `openai/gpt-oss-120b`, 0 fallbacks, 0 failures).
 - **Independent Reviewer Ratings:** [evaluation/independent_reviewer_ratings.jsonl](evaluation/independent_reviewer_ratings.jsonl) contains 30 completed independent baseline ratings.
 - **Completed Human Reviewer Ratings:** [evaluation/human_judge_ratings.jsonl](evaluation/human_judge_ratings.jsonl) contains 30 completed human ratings scored across all six rubric fields.
 - **Template & Blank Review Sheet:** [evaluation/human_judge_ratings_template.jsonl](evaluation/human_judge_ratings_template.jsonl) and [evaluation/human_judge_review.md](evaluation/human_judge_review.md) preserve the original unrated templates.
@@ -331,13 +330,13 @@ To test whether LLM-as-a-judge ratings align with actual human quality assessmen
 1. **Weak Overall Agreement:** Quadratic Weighted Kappa is near zero or negative across all dimensions (Overall QWK: -0.039), indicating weak agreement between the LLM judge and human ratings. Spearman rank correlations are also near zero or negative across the dimensions, so the judge did not show meaningful rank-order alignment with this human sample.
 2. **Helpfulness & Overall Under-Scoring:** The LLM judge substantially under-scores helpfulness (Judge: 3.20 vs. Human: 4.37, Bias: -1.167) and overall quality (Judge: 3.70 vs. Human: 4.43, Bias: -0.733) relative to the human reviewer.
 3. **Safety Metric Ceiling:** Safety achieved the highest exact agreement (76.67%), but QWK is 0.000 because both evaluators assigned near-uniform top scores (Human: 4.77, Judge: 5.00) with minimal rank variance.
-4. **Methodological Takeaway:** The LLM judge should **NOT be presented as a validated surrogate for human quality measurement**. It is retained as a structured automated heuristic, while human evaluation remains the authoritative standard.
+4. **Methodological Takeaway:** The LLM judge should **NOT be presented as a validated surrogate for human quality measurement**. It is retained as a structured automated qualitative signal, while human evaluation remains the authoritative standard.
 
 ### 13.8 Limitations of LLM-as-a-Judge
 
 1. **Prompt & Rubric Sensitivity:** Minor phrasing changes in rubric prompts create substantial scoring shifts.
 2. **Verbosity & Politeness Biases:** LLMs exhibit prompt-dependent length biases unless strictly constrained.
-3. **Disagreement with Human Judgments:** Empirical comparison against human evaluation reveals negative rank correlation (QWK = -0.039), confirming that LLM judges cannot substitute for human oversight.
+3. **Disagreement with Human Judgments:** Empirical comparison against this human sample reveals negative rank correlation (QWK = -0.039), showing that this automated LLM judge should not be treated as a substitute for human oversight.
 
 ---
 
@@ -357,9 +356,9 @@ With an additional week of engineering time, I would focus on four high-impact a
 - **Current Limitation:** Single human reviewer evaluation established weak LLM-judge agreement.
 - **Next Step:** Conduct a multi-annotator double-blind study with 3+ professional support agents across [evaluation/human_judge_review.md](evaluation/human_judge_review.md) to measure inter-human kappa and fine-tune judge prompt rubrics.
 
-### 4. Live CRM Integration & Dynamic Knowledge Base RAG
-- **Current Limitation:** The response generator outputs structured action schemas and templated replies with static help links.
-- **Next Step:** Integrate a vector store (e.g. Chroma/Qdrant) over current Spotify Support FAQs and connect to a mock Hiver/Zendesk webhook API to test live ticket payload dispatch, dynamic article retrieval, and agent handoff triggers.
+### 4. Dynamic Retrieval over Historical Resolutions & Live CRM Webhooks
+- **Current Limitation:** The response generator outputs curated templates with static help links; runtime retrieval over historical conversations was not implemented.
+- **Next Step:** Integrate a vector store (e.g. Chroma/Qdrant) indexing historical resolution trajectories and connect to a mock Hiver/Zendesk webhook API for live ticket payload dispatch.
 
 ---
 
@@ -415,9 +414,9 @@ Key non-obvious engineering and design decisions made throughout project develop
     *Decision:* Configured all 144 unit and integration tests to run offline using mocked HTTP responses and local fixtures.
     *Rationale:* Guarantees fast, deterministic test runs without external network dependencies or token consumption.
 
-13. **Thread Normalization & Handle Sanitization in Preprocessing:**
-    *Decision:* Stripped Twitter handles and normalized URLs during parsing while retaining raw text for diagnostic reference.
-    *Rationale:* Eliminates noise that interferes with regex matching while preserving author roles (`inbound=True/False`).
+13. **Curated Policy Templates over Runtime RAG Retrieval:**
+    *Decision:* Used curated policy/resolution templates derived from historical resolution patterns rather than runtime RAG retrieval.
+    *Rationale:* Ensures predictable, hallucination-free replies and zero runtime database lookup overhead for this stage.
 
 14. **Structured Action Schemas Accompanying Text Replies:**
     *Decision:* The response generator outputs structured machine-readable actions (`action_type`, `escalate_to_human`, `suggested_links`) alongside customer text.
@@ -430,6 +429,7 @@ Key non-obvious engineering and design decisions made throughout project develop
 1. **Twitter Broadcast Thread Merging:** Outage broadcast tweets merge hundreds of independent customer inquiries into single threads.
 2. **Terse / Vague Social Inquiries:** Single-word tweets or emojis without context cannot be classified into substantive intents without human follow-up.
 3. **Deterministic Lexical Boundaries:** While deterministic rules guarantee complete reproducibility, subtle multilingual nuances or complex nested sarcasm benefit from LLM-assisted disambiguation.
+4. **No Runtime Historical Retrieval:** Responses use static curated policy templates rather than dynamic retrieval over historical conversations.
 
 ---
 
@@ -476,13 +476,13 @@ Key non-obvious engineering and design decisions made throughout project develop
   python scripts/demo_agent.py --interactive
   ```
 
-- **Run LLM-as-a-Judge Evaluation (OpenRouter or Groq):**
+- **Run LLM-as-a-Judge Evaluation (Reported Provider: Groq):**
   ```powershell
-  # Option A: Run with OpenRouter
-  python scripts/evaluate_llm_judge.py --provider openrouter
-
-  # Option B: Run with Groq
+  # Reported 30-record run: Groq openai/gpt-oss-120b
   python scripts/evaluate_llm_judge.py --provider groq
+
+  # Optional provider support: OpenRouter
+  python scripts/evaluate_llm_judge.py --provider openrouter
   ```
 
 - **Compare LLM Judge with Independent-Reviewer Ratings:**
