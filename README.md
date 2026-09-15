@@ -175,7 +175,7 @@ Evaluated end-to-end against the 200 canonical gold annotations ([evaluation/gol
 | **Secondary Intents Exact Match** | **96.50%** | **193 / 200** |
 | **Technical Malfunction Scope Accuracy** | **99.00%** | **198 / 200** |
 | **Cross-Cutting Flags Accuracy** | **97.50%** | **195 / 200** |
-| **Non-Intent Accuracy** | **100.00%** | **200 / 200** |
+| **Non-Intent Accuracy** | **100.00%** | **12 / 12** |
 | **Full Record Exact Match Accuracy** | **94.00%** | **188 / 200** |
 
 ### Per-Intent Recall Breakdown
