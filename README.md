@@ -1,8 +1,8 @@
 # Spotify Customer Support Agent (`@SpotifyCares`)
 
-Deterministic customer-support agent and evaluation pipeline built for the Hiver SDE Intern Assignment using the public [Customer Support on Twitter dataset](https://www.kaggle.com/datasets/thoughtvector/customer-support-on-twitter).
+Deterministic customer-support agent with **runtime historical-resolution RAG** and evaluation pipeline built for the Hiver SDE Intern Assignment using the public [Customer Support on Twitter dataset](https://www.kaggle.com/datasets/thoughtvector/customer-support-on-twitter).
 
-The system orchestrates multi-turn conversation parsing, frozen-taxonomy intent classification, operational queue routing, policy escalation, and customer response generation.
+The system orchestrates multi-turn conversation parsing, frozen-taxonomy intent classification, operational queue routing, policy escalation, **runtime retrieval over 28,015 non-gold historical support resolutions**, evidence selection, and customer response generation.
 
 ---
 
@@ -36,8 +36,9 @@ Customer support automation on social channels presents unique engineering chall
 - High volume of unstructured, multi-turn messages with colloquial syntax, slang, and sarcasm.
 - Complex multi-intent inquiries (e.g. concurrent billing disputes and login lockouts).
 - Escalation sensitivity: security incidents and frustrated repeat customers must be routed accurately.
+- Grounded generation: responses should be informed by verified support resolutions rather than hallucinated policies.
 
-This project delivers an end-to-end, deterministic support agent tailored to **Spotify Support (`@SpotifyCares`)**, evaluated against a 200-conversation canonical human gold benchmark.
+This project delivers an end-to-end support agent tailored to **Spotify Support (`@SpotifyCares`)**, evaluated against a 200-conversation canonical human gold benchmark.
 
 ---
 
@@ -102,7 +103,7 @@ The canonical gold evaluation dataset consists of **200 stratified conversations
 The final canonical gold set contains **200 records**. It includes valid examples of `insufficient_information` (11) and `out_of_scope_non_support` (1), but contains **0 canonical examples** of `no_action_acknowledgment_only`. Raw-corpus acknowledgment-only examples were identified during audit, but were outside the frozen candidate and annotation pipeline and were therefore not added or relabelled. Adding them properly would require a fresh annotation/adjudication round. Accordingly, no accuracy claim is made for `no_action_acknowledgment_only` specifically; aggregate non-intent results below apply only to the 12 represented non-intent records.
 
 > [!WARNING]
-> **Important evaluation caveat:** The 200-record gold set became a frozen regression/spec-compliance benchmark during iterative development, and classifier rules were refined against discrepancies found on this set. Therefore, the 100% primary accuracy and 94% full-record exact match should not be interpreted as unbiased out-of-sample generalization. A separate zero-overlap 50-record holdout is reported as a qualitative generalization check.
+> **Important evaluation caveat:** The 200-record gold set functioned as a frozen regression and specification-compliance target during iterative development, and classifier rules were refined against discrepancies observed on this set. Therefore, the 100% primary accuracy and 94% full-record exact match should not be interpreted as an unbiased out-of-sample generalization measurement. A separate zero-overlap 50-record holdout is reported as an uncurated qualitative generalization check.
 
 ---
 
@@ -110,7 +111,7 @@ The final canonical gold set contains **200 records**. It includes valid example
 
 To ensure gold label reliability, a dual-annotation protocol was executed:
 - **Double Annotation:** A 50-conversation subset was annotated independently by two annotators (`annotator_1` and `annotator_2`).
-- **Inter-Annotator Agreement:** Measured **Cohen's Kappa $\kappa = 0.8601$** on primary intent across the double-annotated subset, demonstrating near-perfect agreement.
+- **Inter-Annotator Agreement:** Measured **Cohen's Kappa $\kappa = 0.8601$** on primary intent across the double-annotated subset, demonstrating strong inter-annotator agreement.
 - **Lead Adjudication:** 13 disagreement cases were adjudicated by a Lead Adjudicator with documented rationale in [data/processed/golden_set_adjudications.jsonl](data/processed/golden_set_adjudications.jsonl).
 - Detailed guidelines are preserved in [docs/golden_set_annotation_guidelines.md](docs/golden_set_annotation_guidelines.md).
 
@@ -118,44 +119,68 @@ To ensure gold label reliability, a dual-annotation protocol was executed:
 
 ## 7. Agent Architecture & Response Grounding
 
-The agent is organized as a deterministic 4-stage pipeline orchestrated by `SpotifySupportAgent` in [src/spotify_agent/agent.py](src/spotify_agent/agent.py):
+The agent is organized as a pipeline orchestrated by `SpotifySupportAgent` in [src/spotify_agent/agent.py](src/spotify_agent/agent.py):
 
 ```
-Customer Input (String or Thread Dict)
+Customer Turn / Conversation Input
    │
    ▼
 [1. Conversation Parser] (src/spotify_agent/conversation_parser.py)
-   │  • Normalizes text, handles, URLs, and timestamps
-   │  • Separates customer inquiries from agent responses
+   │  • Normalizes text, decodes HTML entities, isolates customer inquiries
    ▼
-[2. Intent Classifier] (src/spotify_agent/intent_classifier.py)
-   │  • Multi-intent detection & frozen priority resolution
-   │  • Diagnostic technical malfunction scope assignment
-   │  • Cross-cutting flags extraction
+[2. Intent Classifier & Diagnostic Scoper] (src/spotify_agent/intent_classifier.py)
+   │  • Deterministic priority resolution (06_login > 04_billing > 07_tech > ...)
+   │  • Assigns technical malfunction scope (individual, platform_wide, unclear)
+   │  • Extracts cross-cutting flags (dissatisfaction escalation, alternate channel handoff)
    ▼
-[3. Routing Engine] (src/spotify_agent/routing_engine.py)
-   │  • Maps classification to 10 operational queues
-   │  • Applies priority levels (Critical, High, Medium, Low)
-   │  • Determines human escalation & private channel handoff requirements
+[3. Routing Engine & Policy Guardrails] (src/spotify_agent/routing_engine.py)
+   │  • Maps classification to 10 operational queues & priority levels
+   │  • Routing escalation & DM decisions take absolute precedence over retrieval
    ▼
-[4. Response Generator] (src/spotify_agent/response_generator.py)
-   │  • Emits policy-grounded replies and structured actions
+[4. Runtime Historical Resolution Retriever] (src/spotify_agent/retriever.py)
+   │  • Ingests 28,015 sanitized, non-gold Spotify support resolutions
+   │  • Strict exclusion of all 200 gold IDs, 28 design-time IDs, and query ID
+   │  • Sparse TF-IDF cosine similarity search (Cold start: approximately 0.75 s when loading the sparse index. Warm retrieval: approximately 7 ms/query on CPU [p50 7.12 ms, p99 9.12 ms])
+   │  • Returns Top-K candidate resolutions with similarity scores and conversation IDs
    ▼
-AgentResult (Immutable composite containing ParsedConversation, Classification, Routing, Response)
+[5. Evidence Selector & Resolution Extractor] (src/spotify_agent/evidence_selector.py)
+   │  • Evaluates similarity against confidence threshold (τ >= 0.20)
+   │  • Extracts concrete troubleshooting actions (e.g., clean reinstall, cache clear, SheerID)
+   ▼
+[6. Grounded Response Generator & Safety Validator] (src/spotify_agent/response_generator.py)
+   │  • Synthesizes response grounded in retrieved resolution evidence
+   │  • Validates output via safety_validator.py (strips handles, PII, and non-whitelisted URLs)
+   │  • Gracefully falls back to curated policy template on weak/low-confidence matches
+   ▼
+AgentResult (Immutable composite of conversation, classification, routing, response, evidence)
 ```
 
-### Resolution Grounding vs. Runtime Retrieval
-The current response generator uses **deterministic curated policy and resolution templates informed by representative historical support-resolution patterns**, paired with structured runtime fields (`action`, `requires_human_escalation`, `requires_channel_handoff`, `target_queue`). Design-time provenance for the nine substantive response policies is recorded in [response_resolution_provenance.json](data/processed/response_resolution_provenance.json). **Historical conversations are not retrieved at runtime, and runtime retrieval/RAG was intentionally not built as an architectural design choice** to guarantee deterministic execution, zero latency overhead, and immunity to hallucinated URLs. Implementing vector-indexed retrieval over historical resolutions remains a logical next step.
+### Runtime Evidence Grounding vs. Policy Fallback
+- **Historical Precedent Corpus**: Extracted from 28,015 non-gold customer-agent interaction threads. All 200 canonical gold IDs and 28 design-time discussion IDs are strictly excluded ($\text{overlap} = 0$).
+- **Evidence-Grounded Synthesis**: When high-confidence historical evidence matches the customer inquiry, the response generator adapts specific resolution actions (e.g. directing to SheerID student verification or requesting private DM for account charges) rather than returning a static template.
+- **Graceful Fallback**: If query similarity falls below threshold ($\tau < 0.20$) or for unclassified queries, the generator safely falls back to verified policy baselines.
+- **Safety & Escalation Overrides**: Human dissatisfaction escalation and private DM handoffs are strictly enforced by routing guardrails before retrieval synthesis.
+
+### Side-by-Side Response Comparison (Static Baseline vs. Runtime RAG)
+
+The following side-by-side comparisons provide qualitative evidence of runtime retrieval and response variation (with billing dispute routing providing the clearest example of concrete action grounding), rather than a measured retrieval-accuracy improvement. Not every retrieved precedent materially improves the response; where retrieved evidence lacks specific actionable slots, the system safely falls back to curated policy baselines.
+
+| Scenario & Customer Message | Static Baseline Response (`enable_retrieval=False`) | Runtime RAG Grounded Response (`enable_retrieval=True`) | Retrieved Evidence Provenance |
+|---|---|---|---|
+| **Technical Playback Glitch**<br>*"The repeat and shuffle buttons keep freezing on my iPhone app whenever I play downloaded songs."* | *"To troubleshoot playback or device issues, try restarting the Spotify app, checking for updates in your app store, and clearing your local cache in Spotify Settings > Storage. If the issue persists, a clean reinstall often resolves it."* | *"Thanks for reaching out! To troubleshoot playback or device issues, try restarting the Spotify app and clearing your local cache in Spotify Settings > Storage. We hear you - we're working on it as we speak. Stay tuned! Give us a shout if you need anything else."* | Conv ID: `spotify_root_2363319`<br>Similarity: `0.3856` |
+| **Billing Double Charge**<br>*"I noticed two identical charges of $10.99 for Spotify Premium on my bank statement this month."* | *"For billing and charge inquiries, you can check your transaction history and active subscription details at spotify.com/account/subscription. If you notice an unexpected or duplicate charge, our billing team will review your account charges."* | *"For billing and account charges, please send us a Direct Message (DM) with your account email address so our billing specialists can securely look into your payment history. You can also view active charges at spotify.com/account/subscription."* | Conv ID: `spotify_root_2497533`<br>Similarity: `0.3150`<br>Action: `request_dm` |
+| **Student SheerID Verification**<br>*"My student discount verification link failed on SheerID. How can I renew my student status?"* | *"To manage your subscription, switch plans, or invite family members, head to your account page at spotify.com/account. For student plan verification..."* | *"For student discount verification and renewal, you can complete the SheerID verification process directly on your account overview at spotify.com/account."* | Conv ID: `spotify_root_1829032`<br>Similarity: `0.3881`<br>Action: `student_verification` |
+| **Customer Dissatisfaction (Hard Escalation)**<br>*"This is the 4th time I am contacting you and nobody has responded. Fix this immediately!"* | *"We understand your frustration regarding previous delays and apologize for the inconvenience. We have escalated your inquiry directly to our senior support specialists for priority review..."* | *"We understand your frustration regarding previous delays and apologize for the inconvenience. We have escalated your inquiry directly to our senior support specialists for priority review..."* | Guardrail: `escalation_override`<br>Queue: `senior_support_escalation` |
 
 ---
 
 ## 8. Results vs. Baselines
 
-To benchmark classification performance, the final deterministic agent is compared against two reference baselines on the 200-conversation canonical gold evaluation set:
+To benchmark classification performance, the deterministic pipeline is compared against two reference baselines on the 200-conversation canonical gold evaluation set:
 
 1. **Trivial Baseline (Majority Class Predictor):** Always predicts the most frequent class in the gold set (`07_technical_malfunction`, $N=35$). It emits default individual scope with no secondary intents or cross-cutting flags.
 2. **Simple Heuristic Baseline (pre-refinement):** The early rule-based prototype before multi-intent category disambiguation and outage-thread handling was introduced (documented in [evaluation/step8_error_analysis.md](evaluation/step8_error_analysis.md)). This represents an earlier deterministic version of the same overall rule-based approach, not an independently trained ML model.
-3. **Final Agent (Deterministic Multi-Stage Pipeline):** The current pipeline with priority-resolved classification, scope diagnostics, and flag extraction.
+3. **Final Agent (Deterministic Multi-Stage Pipeline):** The pipeline with priority-resolved classification, scope diagnostics, flag extraction, and optional runtime RAG grounding.
 
 ### Benchmark Comparison (Canonical Gold Set $N=200$)
 
@@ -272,7 +297,7 @@ While deterministic classification metrics measure routing correctness against g
 | Dimension | Key Evaluation Criteria |
 |---|---|
 | **1. Correctness** (1–5) | Does the response accurately address the customer's true issue and avoid false technical claims? |
-| **2. Groundedness** (1–5) | Is the response strictly grounded in authentic Spotify policies without inventing non-existent features? |
+| **2. Groundedness** (1–5) | Is the response strictly grounded in authentic historical Spotify support resolutions and the system's approved policy templates, without inventing unsupported instructions? |
 | **3. Helpfulness** (1–5) | Does the response provide actionable troubleshooting steps or an unambiguous resolution path? |
 | **4. Brand Appropriateness** (1–5) | Is the tone empathetic, professional, concise, and aligned with `@SpotifyCares` social care style? |
 | **5. Safety & Escalation** (1–5) | Does the response avoid unsafe promises, protect privacy, and route sensitive cases to private DMs? |
@@ -282,7 +307,7 @@ While deterministic classification metrics measure routing correctness against g
 The evaluation harness supports OpenAI-compatible endpoints via [src/spotify_agent/llm_judge.py](src/spotify_agent/llm_judge.py).
 
 - **Reported Run Configuration:** **Groq** using **`openai/gpt-oss-120b`** (completed 30/30 records, 0 fallbacks, 0 failures).
-- **Optional / Provider-Configurable Support:** OpenRouter is supported as a provider option via `--provider openrouter` CLI flag (e.g. `meta-llama/llama-3.3-70b-instruct:free`), though third-party free tier endpoints are not guaranteed to remain available.
+- **Optional / Provider-Configurable Support:** OpenRouter is supported as a provider option via `--provider openrouter` CLI flag (e.g. `meta-llama/llama-3.3-70b-instruct:free`).
 - **Security Invariant:** API keys are strictly read from environment variables (`GROQ_API_KEY`, `OPENROUTER_API_KEY`) or local `.env`. No credentials are ever hardcoded or exposed.
 
 ### 13.4 Deterministic Evaluation Subset & Evaluator Protocols
@@ -292,21 +317,10 @@ The evaluation harness supports OpenAI-compatible endpoints via [src/spotify_age
 - **Independent Reviewer Ratings:** [evaluation/independent_reviewer_ratings.jsonl](evaluation/independent_reviewer_ratings.jsonl) contains 30 completed independent baseline ratings.
 - **Completed Human Reviewer Ratings:** [evaluation/human_judge_ratings.jsonl](evaluation/human_judge_ratings.jsonl) contains 30 completed human ratings scored across all six rubric fields.
 - **Template & Blank Review Sheet:** [evaluation/human_judge_ratings_template.jsonl](evaluation/human_judge_ratings_template.jsonl) and [evaluation/human_judge_review.md](evaluation/human_judge_review.md) preserve the original unrated templates.
-- **Historical Interrupted Run:** [evaluation/llm_judge_results.jsonl](evaluation/llm_judge_results.jsonl) retains the earlier 10-record run unchanged.
 
 The routing engine implements human-escalation decisions and is covered by deterministic tests, but no independent escalation accuracy metric is reported. The existing 30-record human review used a 1–5 Safety/Escalation response-quality score rather than case-level escalation labels. A separate AI-assisted escalation annotation workspace was created outside the canonical gold set, but the external model evaluation did not complete, so no escalation precision/recall/F1 is claimed.
 
-### 13.5 Evaluation Resumption, Rate Limits & Fallbacks
-
-The evaluator supports continuation via `--resume-from`. Existing completed IDs are skipped and copied into staging output without re-calling APIs:
-
-```powershell
-python scripts/evaluate_llm_judge.py --provider groq --resume-from evaluation/llm_judge_results.jsonl --output evaluation/llm_judge_results_complete.jsonl
-```
-
-Requests use an 8-second pacing delay and inspect upstream `Retry-After` / rate-limit headers. For Groq, the primary model is `openai/gpt-oss-120b` and the fallback is `openai/gpt-oss-20b`.
-
-### 13.6 Independent-Reviewer Agreement Metrics (30/30 Overlap)
+### 13.5 Independent-Reviewer Agreement Metrics (30/30 Overlap)
 
 Evaluated via [scripts/compare_judge_human.py](scripts/compare_judge_human.py) comparing [evaluation/llm_judge_results_complete.jsonl](evaluation/llm_judge_results_complete.jsonl) against [evaluation/independent_reviewer_ratings.jsonl](evaluation/independent_reviewer_ratings.jsonl) ([evaluation/judge_reviewer_agreement.json](evaluation/judge_reviewer_agreement.json)):
 
@@ -319,9 +333,9 @@ Evaluated via [scripts/compare_judge_human.py](scripts/compare_judge_human.py) c
 | **Safety & Escalation** | 3.93 | 5.00 | 3.33% | 1.067 | +1.067 | 0.000 | 0.000 |
 | **Overall Score** | 2.70 | 3.70 | 20.00% | 1.067 | +1.000 | 0.535 | 0.373 |
 
-### 13.7 Human Agreement Check (30/30 Overlap)
+### 13.6 Human Agreement Check (30/30 Overlap)
 
-To test whether LLM-as-a-judge ratings align with actual human quality assessments, all 30 conversations were independently evaluated by a human reviewer ([evaluation/human_judge_ratings.jsonl](evaluation/human_judge_ratings.jsonl)). The 1-to-1 agreement report was computed via [scripts/compare_judge_human.py](scripts/compare_judge_human.py) and stored in [evaluation/judge_human_agreement.json](evaluation/judge_human_agreement.json):
+To test whether LLM-as-a-judge ratings align with actual human quality assessments, all 30 conversations were independently evaluated by a human reviewer ([evaluation/human_judge_ratings.jsonl](evaluation/human_judge_ratings.jsonl)). The agreement report was computed via [scripts/compare_judge_human.py](scripts/compare_judge_human.py) and stored in [evaluation/judge_human_agreement.json](evaluation/judge_human_agreement.json):
 
 | Rubric Dimension | Human Mean | Judge Mean | Exact Agreement (%) | MAE | Mean Bias (Judge − Human) | Spearman $\rho$ | Quadratic Weighted Kappa (QWK) |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
@@ -333,16 +347,10 @@ To test whether LLM-as-a-judge ratings align with actual human quality assessmen
 | **Overall Score** | 4.43 | 3.70 | 20.00% | 1.133 | -0.733 | -0.031 | -0.039 |
 
 #### Key Findings from Human Agreement Analysis:
-1. **Weak Overall Agreement:** Quadratic Weighted Kappa is near zero or negative across all dimensions (Overall QWK: -0.039), indicating weak agreement between the LLM judge and human ratings. Spearman rank correlations are also near zero or negative across the dimensions, so the judge did not show meaningful rank-order alignment with this human sample.
+1. **Weak Overall Agreement:** Quadratic Weighted Kappa is near zero or negative across all dimensions (Overall QWK: -0.039), indicating weak agreement between the LLM judge and human ratings. Spearman rank correlations are also near zero or negative across the dimensions.
 2. **Helpfulness & Overall Under-Scoring:** The LLM judge substantially under-scores helpfulness (Judge: 3.20 vs. Human: 4.37, Bias: -1.167) and overall quality (Judge: 3.70 vs. Human: 4.43, Bias: -0.733) relative to the human reviewer.
 3. **Safety Metric Ceiling:** Safety achieved the highest exact agreement (76.67%), but QWK is 0.000 because both evaluators assigned near-uniform top scores (Human: 4.77, Judge: 5.00) with minimal rank variance.
 4. **Methodological Takeaway:** The LLM judge should **NOT be presented as a validated surrogate for human quality measurement**. It is retained as a structured automated qualitative signal, while human evaluation remains the authoritative standard.
-
-### 13.8 Limitations of LLM-as-a-Judge
-
-1. **Prompt & Rubric Sensitivity:** Minor phrasing changes in rubric prompts create substantial scoring shifts.
-2. **Verbosity & Politeness Biases:** LLMs exhibit prompt-dependent length biases unless strictly constrained.
-3. **Disagreement with Human Judgments:** Empirical comparison against this human sample reveals negative rank correlation (QWK = -0.039), showing that this automated LLM judge should not be treated as a substitute for human oversight.
 
 ---
 
@@ -351,8 +359,8 @@ To test whether LLM-as-a-judge ratings align with actual human quality assessmen
 With an additional week of engineering time, I would focus on four high-impact architectural and evaluation enhancements:
 
 ### 1. Hybrid Small-LLM Fallback for Low-Confidence Triage
-- **Current Limitation:** The deterministic classifier runs in <2ms with 100% reproducibility, but routes 72% of raw social mentions to `insufficient_information` due to strict pattern matching.
-- **Next Step:** Implement a hybrid tiered classifier: high-confidence queries execute deterministically via rules; borderline or vague inquiries pass to a local Small Language Model (e.g. Llama 3.3 8B or Mistral 7B) with few-shot prompt constraints.
+- **Current Limitation:** The deterministic classifier routes 72% of raw social mentions to `insufficient_information` due to strict keyword/regex pattern boundaries.
+- **Next Step:** Implement a hybrid tiered classifier: high-confidence queries execute deterministically via rules; borderline inquiries pass to a local Small Language Model (e.g. Llama 3.3 8B or Mistral 7B) with few-shot constraints.
 
 ### 2. Multi-Author Graph Unrolling for Broadcast Outage Threads
 - **Current Limitation:** Public brand status updates merge hundreds of distinct customer replies into a single conversation graph, creating multi-customer intent collisions.
@@ -362,9 +370,9 @@ With an additional week of engineering time, I would focus on four high-impact a
 - **Current Limitation:** Single human reviewer evaluation established weak LLM-judge agreement.
 - **Next Step:** Conduct a multi-annotator double-blind study with 3+ professional support agents across [evaluation/human_judge_review.md](evaluation/human_judge_review.md) to measure inter-human kappa and fine-tune judge prompt rubrics.
 
-### 4. Dynamic Retrieval over Historical Resolutions & Live CRM Webhooks
-- **Current Limitation:** The response generator outputs curated templates with static help links; runtime retrieval over historical conversations was not implemented.
-- **Next Step:** Integrate a vector store (e.g. Chroma/Qdrant) indexing historical resolution trajectories and connect to a mock Hiver/Zendesk webhook API for live ticket payload dispatch.
+### 4. Hybrid Dense-Sparse (BM25 + MiniLM) Retrieval & Live CRM Webhooks
+- **Current Architecture:** Runtime retrieval uses sparse TF-IDF over 28,015 historical resolutions (Cold start: approximately 0.75 s when loading the sparse index. Warm retrieval: approximately 7 ms/query on CPU [p50 7.12 ms, p99 9.12 ms]) with zero external dependencies.
+- **Next Step:** Introduce an optional hybrid dense-sparse retriever (e.g., combining BM25 with `all-MiniLM-L6-v2` embeddings) to improve recall on short paraphrases, and connect to a mock Hiver/Zendesk webhook API for live ticket payload dispatch.
 
 ---
 
@@ -374,7 +382,7 @@ Key non-obvious engineering and design decisions made throughout project develop
 
 1. **Deterministic Rule Pipeline over Pure LLM Inference:**
    *Decision:* Built a multi-stage deterministic regex/keyword parser and classifier rather than relying solely on LLM prompt-based classification.
-   *Rationale:* Ensures 100% test reproducibility, zero runtime API costs for classification, and immunity to prompt injection. Runtime is deterministic and lightweight; no formal latency benchmark is reported.
+   *Rationale:* Ensures 100% test reproducibility, zero runtime API costs for classification, and immunity to prompt injection.
 
 2. **Frozen Tier-3 Intent Hierarchy with Strict Priority Order (P0 to P8):**
    *Decision:* Defined 9 substantive intents arranged in strict priority (`06_login` > `04_billing` > `07_technical` > ... > `09_artist`).
@@ -382,7 +390,7 @@ Key non-obvious engineering and design decisions made throughout project develop
 
 3. **Decoupling Substantive Intents from Non-Intent Classes:**
    *Decision:* Split classification into 9 core support intents and 3 non-intent triage categories (`insufficient_information`, `out_of_scope_non_support`, `no_action_acknowledgment_only`).
-   *Rationale:* Avoids polluting domain-specific support queues with social chatter, single-word replies, or non-Spotify mentions.
+   *Rationale:* Avoids polluting domain-specific support queues with social chatter or single-word replies.
 
 4. **Mandatory Diagnostic Scope for Technical Malfunctions:**
    *Decision:* Required every `07_technical_malfunction` classification to output a `technical_malfunction_scope` (`individual`, `platform_wide`, `unclear`).
@@ -417,16 +425,16 @@ Key non-obvious engineering and design decisions made throughout project develop
     *Rationale:* Prevents conflation of automated or baseline reviewer scores with verified human evaluation.
 
 12. **Zero Live API Calls in Automated CI Test Suite:**
-    *Decision:* Configured all 157 unit and integration tests to run offline using mocked HTTP responses and local fixtures.
+    *Decision:* Configured all 173 unit and integration tests to run offline using mocked HTTP responses and local fixtures.
     *Rationale:* Guarantees fast, deterministic test runs without external network dependencies or token consumption.
 
-13. **Curated Policy Templates over Runtime RAG Retrieval:**
-    *Decision:* Used curated policy/resolution templates derived from historical resolution patterns rather than runtime RAG retrieval.
-    *Rationale:* Ensures predictable, hallucination-free replies and zero runtime database lookup overhead for this stage.
+13. **Runtime Historical Resolution RAG with Zero External Dependencies:**
+    *Decision:* Implemented runtime sparse retrieval over 28,015 non-gold historical resolutions using `scikit-learn` TF-IDF vectors, paired with deterministic evidence synthesis and curated policy fallback.
+    *Rationale:* Provides authentic historical precedent grounding and dynamic reply tailoring with zero runtime API costs (Cold start: approximately 0.75 s when loading the sparse index. Warm retrieval: approximately 7 ms/query on CPU [p50 7.12 ms, p99 9.12 ms]), and reduces open-ended generation risk through deterministic evidence synthesis, sanitization, and curated fallback.
 
 14. **Structured Action Schemas Accompanying Text Replies:**
-    *Decision:* The response generator outputs structured runtime fields (`action`, `requires_human_escalation`, `requires_channel_handoff`, `target_queue`) alongside customer text.
-    *Rationale:* Enables automated downstream CRM execution (e.g. creating Zendesk macros or initiating DM handoffs) without requiring NLP parsing of the generated reply.
+    *Decision:* The response generator outputs structured runtime fields (`action`, `requires_human_escalation`, `requires_channel_handoff`, `target_queue`, `grounding_source`, `retrieved_evidence`) alongside customer text.
+    *Rationale:* Enables automated downstream CRM execution without requiring NLP parsing of the generated reply.
 
 ---
 
@@ -435,11 +443,27 @@ Key non-obvious engineering and design decisions made throughout project develop
 1. **Twitter Broadcast Thread Merging:** Outage broadcast tweets merge hundreds of independent customer inquiries into single threads.
 2. **Terse / Vague Social Inquiries:** Single-word tweets or emojis without context cannot be classified into substantive intents without human follow-up.
 3. **Deterministic Lexical Boundaries:** While deterministic rules guarantee complete reproducibility, subtle multilingual nuances or complex nested sarcasm benefit from LLM-assisted disambiguation.
-4. **No Runtime Historical Retrieval:** Responses use static curated policy templates rather than dynamic retrieval over historical conversations.
+4. **Lexical Sparse Retrieval Boundaries:** Runtime retrieval relies on TF-IDF cosine similarity over customer turns. While fast (Cold start: approximately 0.75 s when loading the sparse index. Warm retrieval: approximately 7 ms/query on CPU [p50 7.12 ms, p99 9.12 ms]) and 100% reproducible, it depends on lexical term overlap and does not capture dense semantic paraphrases that embedding models provide.
+5. **Deterministic Evidence Synthesis vs. Generative LLMs:** The generator grounds replies by selecting verified historical troubleshooting actions and slot-filling structured policy templates rather than open-ended LLM text generation, deliberately trading stylistic variability for predictable safety boundaries and reduced open-ended generation risk.
 
 ---
 
 ## 17. Setup & Reproducibility
+
+### Artifact & Scope Distinction
+
+To ensure complete clarity for independent evaluators, the repository separates two tiers of reproducibility:
+
+The canonical benchmark is fully runnable from a fresh clone; the 28,015-record RAG demonstration requires the separately acquired source corpus described in Section 19.
+
+1. **Self-Contained Canonical Benchmark (Repository-Contained, <1 minute):**
+   - All 200 raw candidate conversations (`golden_set_candidates.jsonl`), 200 gold annotations (`golden_set_annotations.jsonl`), 50 dual-annotation adjudications (`golden_set_adjudications.jsonl`), and 28 design-time exclusions (`golden_set_exclusions.txt`) are fully tracked in Git.
+   - The test suite (`pytest -q`, 173 tests), gold evaluation harness (`evaluate_agent.py`), and annotation integrity validator (`validate_gold_annotations.py`) run **immediately on a fresh clone with zero data downloads**.
+
+2. **Full-Corpus Runtime RAG Reconstruction (Optional, Requires Dataset):**
+   - The full historical resolution corpus (`historical_resolutions.jsonl`, 28,015 records) is generated from `data/processed/spotify_conversations.jsonl`.
+   - If `spotify_conversations.jsonl` is present, `python scripts/build_resolution_index.py` builds the sanitized resolution index in **~5.8 seconds offline**.
+   - If reconstructing the entire 28,000-conversation tree from scratch, the raw 516 MB Kaggle dataset (`twcs.csv`) must be placed in `data/raw/` (see Section 19).
 
 ### Environment Setup
 
@@ -456,33 +480,44 @@ Key non-obvious engineering and design decisions made throughout project develop
 
 ### Execution Commands
 
-- **Run Test Suite:**
+- **1. Run Complete Test Suite (173 Tests, Immediate):**
   ```bash
   python -m pytest -q
   ```
 
-- **Run Canonical Gold Evaluation Harness (200 Records):**
+- **2. Run Canonical Gold Evaluation Harness (200 Records, Immediate):**
   ```bash
   python scripts/evaluate_agent.py
   ```
 
-- **Run Qualitative Holdout Evaluation (50 Unseen Records):**
-  ```bash
-  python scripts/evaluate_holdout.py
-  ```
-
-- **Validate Gold Annotations & Referential Integrity:**
+- **3. Validate Gold Annotations & Referential Integrity (Immediate):**
   ```bash
   python scripts/validate_gold_annotations.py
   ```
 
-- **Interactive Support Agent CLI:**
+- **4. Build / Regenerate Historical Resolution Index (Requires `spotify_conversations.jsonl`):**
+  ```bash
+  python scripts/build_resolution_index.py
+  ```
+  *Executes in ~5.8s offline. Extracts non-gold resolutions, applies handle/PII sanitization, and strictly excludes all 228 gold & design-time records.*
+
+- **5. Compare Static Baseline vs. Runtime RAG Grounding:**
+  ```bash
+  python scripts/compare_rag_vs_static.py
+  ```
+
+- **6. Run Qualitative Holdout Evaluation (50 Unseen Records):**
+  ```bash
+  python scripts/evaluate_holdout.py
+  ```
+
+- **7. Interactive Support Agent CLI:**
   ```bash
   python scripts/demo_agent.py "I was charged twice for Spotify Premium this month"
   python scripts/demo_agent.py --interactive
   ```
 
-- **Run LLM-as-a-Judge Evaluation (Reported Provider: Groq):**
+- **8. Run LLM-as-a-Judge Evaluation (Reported Provider: Groq):**
   ```powershell
   # Reported 30-record run: Groq openai/gpt-oss-120b
   python scripts/evaluate_llm_judge.py --provider groq
@@ -491,12 +526,12 @@ Key non-obvious engineering and design decisions made throughout project develop
   python scripts/evaluate_llm_judge.py --provider openrouter
   ```
 
-- **Compare LLM Judge with Independent-Reviewer Ratings:**
+- **9. Compare LLM Judge with Independent-Reviewer Ratings:**
   ```powershell
   python scripts/compare_judge_human.py --judge-results evaluation/llm_judge_results_complete.jsonl --reviewer-ratings evaluation/independent_reviewer_ratings.jsonl --output evaluation/judge_reviewer_agreement.json --evaluator-label "Independent Reviewer"
   ```
 
-- **Compare LLM Judge with Completed Human Reviewer Ratings:**
+- **10. Compare LLM Judge with Completed Human Reviewer Ratings:**
   ```powershell
   python scripts/compare_judge_human.py --judge-results evaluation/llm_judge_results_complete.jsonl --reviewer-ratings evaluation/human_judge_ratings.jsonl --output evaluation/judge_human_agreement.json --evaluator-label "Human Reviewer"
   ```
@@ -508,7 +543,7 @@ Key non-obvious engineering and design decisions made throughout project develop
 ```
 hiver-support-agent/
 ├── README.md                                # Comprehensive project documentation
-├── requirements.txt                         # Dependency specifications
+├── requirements.txt                         # Minimal dependency specifications (pytest, scikit-learn, python-dotenv)
 ├── .gitignore                               # Git packaging and tracking rules
 ├── src/
 │   └── spotify_agent/
@@ -516,10 +551,15 @@ hiver-support-agent/
 │       ├── conversation_parser.py           # Multi-turn parsing & normalization
 │       ├── intent_classifier.py             # Deterministic 9-intent & non-intent classification
 │       ├── routing_engine.py                # Operational routing & escalation rules
-│       ├── response_generator.py            # Customer response generation
+│       ├── retriever.py                     # Runtime historical resolution retriever (TF-IDF sparse index)
+│       ├── evidence_selector.py             # Historical evidence extraction & confidence filtering
+│       ├── safety_validator.py              # Sanitizer & safety validator (handle/PII/URL checks)
+│       ├── response_generator.py            # Customer response generation (grounded synthesis + fallback)
 │       ├── llm_judge.py                     # Provider-configurable LLM-as-a-judge quality evaluator
 │       └── agent.py                         # End-to-end orchestration pipeline
 ├── scripts/
+│   ├── build_resolution_index.py            # Offline resolution extractor (28,015 records)
+│   ├── compare_rag_vs_static.py             # Head-to-head static vs. RAG comparison harness
 │   ├── demo_agent.py                        # Interactive CLI demo interface
 │   ├── evaluate_agent.py                    # Canonical gold evaluation harness (200 records)
 │   ├── evaluate_holdout.py                  # Qualitative unseen holdout evaluation harness (50 records)
@@ -547,7 +587,8 @@ hiver-support-agent/
 │       ├── golden_set_annotations.jsonl     # 200 canonical human gold annotations
 │       ├── golden_set_adjudications.jsonl   # 50 dual-annotation records & adjudications
 │       ├── golden_set_lead_adjudications.jsonl
-│       └── golden_set_exclusions.txt
+│       ├── golden_set_exclusions.txt        # 28 design-time protected IDs
+│       └── historical_resolutions_stats.json # Index generation summary stats
 ├── docs/
 │   ├── intent_taxonomy.md                   # Frozen Tier-3 intent taxonomy specification
 │   └── golden_set_annotation_guidelines.md  # Annotation protocols & guidelines
@@ -555,14 +596,15 @@ hiver-support-agent/
     ├── test_conversation_parser.py
     ├── test_intent_classifier.py
     ├── test_routing_engine.py
+    ├── test_retriever.py                    # Unit tests for retrieval & zero-gold-leakage
+    ├── test_evidence_grounding.py           # Unit tests for evidence grounding & escalation guardrails
+    ├── test_safety_validator.py             # Unit tests for sanitization & domain whitelisting
     ├── test_response_generator.py
     ├── test_spotify_agent.py
     ├── test_evaluate_agent.py
     ├── test_evaluate_holdout.py
     └── test_llm_judge.py
 ```
-
-Current additional evaluation artifacts include `scripts/evaluate_escalation_ai.py`, `data/processed/escalation_annotation_candidates.jsonl`, `data/processed/escalation_annotator_1_workspace.jsonl`, `data/processed/escalation_annotator_2_workspace.jsonl`, `data/processed/response_resolution_provenance.json`, `docs/escalation_annotation_guidelines.md`, `tests/test_escalation_ai_evaluation.py`, and `tests/test_response_resolution_provenance.py`.
 
 ---
 

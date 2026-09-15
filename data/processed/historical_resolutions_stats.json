@@ -1,0 +1,9 @@
+{
+  "total_source_threads": 28280,
+  "protected_exclusion_ids_loaded": 228,
+  "excluded_gold_threads_count": 228,
+  "skipped_no_agent_count": 3,
+  "skipped_no_customer_count": 0,
+  "skipped_too_short_count": 34,
+  "indexed_resolution_count": 28015
+}

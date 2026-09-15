@@ -38,6 +38,7 @@ scratch/
 # Large Raw & Intermediate Datasets
 data/raw/
 data/processed/spotify_conversations.jsonl
+data/processed/historical_resolutions.jsonl
 data/processed/intent_discovery_sample.jsonl
 data/processed/annotator_*
 data/processed/golden_set_candidates_run*
