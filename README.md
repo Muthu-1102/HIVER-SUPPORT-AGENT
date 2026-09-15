@@ -94,8 +94,12 @@ The support agent operates on a frozen Tier-3 intent taxonomy detailed in [docs/
 The canonical gold evaluation dataset consists of **200 stratified conversations** located in [data/processed/golden_set_annotations.jsonl](data/processed/golden_set_annotations.jsonl), paired with raw input context in [data/processed/golden_set_candidates.jsonl](data/processed/golden_set_candidates.jsonl).
 
 ### Sampling Methodology
-- **Stratified Coverage:** Sampled across all 9 substantive intents, non-intent classes, single/multi-turn conversations, and outage threads.
+- **Stratified Coverage:** Sampled across all 9 substantive intents, the represented non-intent classes, single/multi-turn conversations, and outage threads.
 - **Referential Integrity:** Validated via [scripts/validate_gold_annotations.py](scripts/validate_gold_annotations.py) to guarantee schema compliance, unique IDs, and confidence tracking.
+
+### Non-Intent Coverage Limitation
+
+The final canonical gold set contains **200 records**. It includes valid examples of `insufficient_information` (11) and `out_of_scope_non_support` (1), but contains **0 canonical examples** of `no_action_acknowledgment_only`. Raw-corpus acknowledgment-only examples were identified during audit, but were outside the frozen candidate and annotation pipeline and were therefore not added or relabelled. Adding them properly would require a fresh annotation/adjudication round. Accordingly, no accuracy claim is made for `no_action_acknowledgment_only` specifically; aggregate non-intent results below apply only to the 12 represented non-intent records.
 
 > [!WARNING]
 > **Important evaluation caveat:** The 200-record gold set became a frozen regression/spec-compliance benchmark during iterative development, and classifier rules were refined against discrepancies found on this set. Therefore, the 100% primary accuracy and 94% full-record exact match should not be interpreted as unbiased out-of-sample generalization. A separate zero-overlap 50-record holdout is reported as a qualitative generalization check.
@@ -141,7 +145,7 @@ AgentResult (Immutable composite containing ParsedConversation, Classification, 
 ```
 
 ### Resolution Grounding vs. Runtime Retrieval
-The current response generator uses **curated policy and resolution templates derived from empirical patterns in the historical support corpus**, paired with structured action schemas (`action_type`, `escalate_to_human`, `suggested_links`). **Runtime retrieval/RAG over historical conversations was intentionally not built as an architectural design choice** to guarantee deterministic execution, zero latency overhead, and immunity to hallucinated URLs. Implementing vector-indexed retrieval over historical resolutions remains a logical next step.
+The current response generator uses **deterministic curated policy and resolution templates informed by representative historical support-resolution patterns**, paired with structured runtime fields (`action`, `requires_human_escalation`, `requires_channel_handoff`, `target_queue`). Design-time provenance for the nine substantive response policies is recorded in [response_resolution_provenance.json](data/processed/response_resolution_provenance.json). **Historical conversations are not retrieved at runtime, and runtime retrieval/RAG was intentionally not built as an architectural design choice** to guarantee deterministic execution, zero latency overhead, and immunity to hallucinated URLs. Implementing vector-indexed retrieval over historical resolutions remains a logical next step.
 
 ---
 
@@ -175,7 +179,7 @@ Evaluated end-to-end against the 200 canonical gold annotations ([evaluation/gol
 | **Secondary Intents Exact Match** | **96.50%** | **193 / 200** |
 | **Technical Malfunction Scope Accuracy** | **99.00%** | **198 / 200** |
 | **Cross-Cutting Flags Accuracy** | **97.50%** | **195 / 200** |
-| **Non-Intent Accuracy** | **100.00%** | **12 / 12** |
+| **Represented Non-Intent Accuracy** | **100.00%** | **12 / 12** |
 | **Full Record Exact Match Accuracy** | **94.00%** | **188 / 200** |
 
 ### Per-Intent Recall Breakdown
@@ -191,7 +195,7 @@ Evaluated end-to-end against the 200 canonical gold annotations ([evaluation/gol
 | `07_technical_malfunction` | 35 | 35 | 35 | **100.0%** |
 | `08_feature_request` | 26 | 26 | 26 | **100.0%** |
 | `09_artist_rights_holder_mgmt` | 12 | 12 | 12 | **100.0%** |
-| Non-Intent Classes | 12 | 12 | 12 | **100.0%** |
+| Represented Non-Intent Classes | 12 | 12 | 12 | **100.0%** |
 
 ---
 
@@ -290,6 +294,8 @@ The evaluation harness supports OpenAI-compatible endpoints via [src/spotify_age
 - **Template & Blank Review Sheet:** [evaluation/human_judge_ratings_template.jsonl](evaluation/human_judge_ratings_template.jsonl) and [evaluation/human_judge_review.md](evaluation/human_judge_review.md) preserve the original unrated templates.
 - **Historical Interrupted Run:** [evaluation/llm_judge_results.jsonl](evaluation/llm_judge_results.jsonl) retains the earlier 10-record run unchanged.
 
+The routing engine implements human-escalation decisions and is covered by deterministic tests, but no independent escalation accuracy metric is reported. The existing 30-record human review used a 1–5 Safety/Escalation response-quality score rather than case-level escalation labels. A separate AI-assisted escalation annotation workspace was created outside the canonical gold set, but the external model evaluation did not complete, so no escalation precision/recall/F1 is claimed.
+
 ### 13.5 Evaluation Resumption, Rate Limits & Fallbacks
 
 The evaluator supports continuation via `--resume-from`. Existing completed IDs are skipped and copied into staging output without re-calling APIs:
@@ -368,7 +374,7 @@ Key non-obvious engineering and design decisions made throughout project develop
 
 1. **Deterministic Rule Pipeline over Pure LLM Inference:**
    *Decision:* Built a multi-stage deterministic regex/keyword parser and classifier rather than relying solely on LLM prompt-based classification.
-   *Rationale:* Ensures 100% test reproducibility, zero runtime API costs for classification, <5ms latency per message, and immunity to prompt injection.
+   *Rationale:* Ensures 100% test reproducibility, zero runtime API costs for classification, and immunity to prompt injection. Runtime is deterministic and lightweight; no formal latency benchmark is reported.
 
 2. **Frozen Tier-3 Intent Hierarchy with Strict Priority Order (P0 to P8):**
    *Decision:* Defined 9 substantive intents arranged in strict priority (`06_login` > `04_billing` > `07_technical` > ... > `09_artist`).
@@ -411,7 +417,7 @@ Key non-obvious engineering and design decisions made throughout project develop
     *Rationale:* Prevents conflation of automated or baseline reviewer scores with verified human evaluation.
 
 12. **Zero Live API Calls in Automated CI Test Suite:**
-    *Decision:* Configured all 144 unit and integration tests to run offline using mocked HTTP responses and local fixtures.
+    *Decision:* Configured all 157 unit and integration tests to run offline using mocked HTTP responses and local fixtures.
     *Rationale:* Guarantees fast, deterministic test runs without external network dependencies or token consumption.
 
 13. **Curated Policy Templates over Runtime RAG Retrieval:**
@@ -419,7 +425,7 @@ Key non-obvious engineering and design decisions made throughout project develop
     *Rationale:* Ensures predictable, hallucination-free replies and zero runtime database lookup overhead for this stage.
 
 14. **Structured Action Schemas Accompanying Text Replies:**
-    *Decision:* The response generator outputs structured machine-readable actions (`action_type`, `escalate_to_human`, `suggested_links`) alongside customer text.
+    *Decision:* The response generator outputs structured runtime fields (`action`, `requires_human_escalation`, `requires_channel_handoff`, `target_queue`) alongside customer text.
     *Rationale:* Enables automated downstream CRM execution (e.g. creating Zendesk macros or initiating DM handoffs) without requiring NLP parsing of the generated reply.
 
 ---
@@ -555,6 +561,8 @@ hiver-support-agent/
     ├── test_evaluate_holdout.py
     └── test_llm_judge.py
 ```
+
+Current additional evaluation artifacts include `scripts/evaluate_escalation_ai.py`, `data/processed/escalation_annotation_candidates.jsonl`, `data/processed/escalation_annotator_1_workspace.jsonl`, `data/processed/escalation_annotator_2_workspace.jsonl`, `data/processed/response_resolution_provenance.json`, `docs/escalation_annotation_guidelines.md`, `tests/test_escalation_ai_evaluation.py`, and `tests/test_response_resolution_provenance.py`.
 
 ---
 

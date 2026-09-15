@@ -13,7 +13,8 @@ This document presents the complete forensic error analysis of the `SpotifySuppo
 - **Secondary Intent Exact Match:** **96.50%** (193/200)
 - **Technical Malfunction Scope Accuracy:** **99.00%** (198/200)
 - **Cross-Cutting Flags Accuracy:** **97.50%** (195/200)
-- **Non-Intent Accuracy:** **100.00%** (200/200)
+- **Represented Non-Intent Accuracy:** **100.00%** (12/12)
+- **Non-Intent Coverage Limitation:** The canonical gold set contains 12 represented non-intent records: 11 `insufficient_information` and 1 `out_of_scope_non_support`. It contains 0 canonical examples of `no_action_acknowledgment_only`; therefore, no accuracy claim is made for that absent class.
 - **Full Record Exact Match Accuracy:** **94.00%** (188/200)
 - **Total Discrepancies:** 12 records *(0 primary errors; all 12 are documented multi-customer outage threads or annotator boundary noise)*
 

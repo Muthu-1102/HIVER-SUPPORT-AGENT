@@ -1,0 +1,165 @@
+{
+  "schema_version": "1.0.0",
+  "artifact_type": "design_time_response_resolution_provenance",
+  "source_corpus": "data/processed/spotify_conversations.jsonl",
+  "selection_method": "Manual design-time audit of non-gold reconstructed threads with clear Spotify response evidence and no reconstruction flags.",
+  "runtime_usage": "none",
+  "canonical_gold_policy": "Representative records are excluded from the canonical 200-record gold set.",
+  "records": [
+    {
+      "intent": "01_catalog_content_gap",
+      "template_identifier": "01_catalog_content_gap",
+      "representative_conversations": [
+        {
+          "conversation_id": "spotify_root_2869",
+          "observed_resolution_pattern": "Spotify explained that unavailable catalog content can be temporarily removed because of licensing changes and set expectations for possible future availability.",
+          "evidence_excerpt": "Sometimes content gets temporarily removed because of licensing changes. Hopefully we'll have them available again soon.",
+          "policy_influence": "Supports a concise licensing-based explanation and avoids promising that a specific track will be restored."
+        }
+      ],
+      "source_metadata": {
+        "source_record_field": "ordered_messages",
+        "reconstruction_flags": [],
+        "sensitive_content_removed": true
+      }
+    },
+    {
+      "intent": "02_catalog_metadata_error",
+      "template_identifier": "02_catalog_metadata_error",
+      "representative_conversations": [
+        {
+          "conversation_id": "spotify_root_58948",
+          "observed_resolution_pattern": "Spotify requested track identifiers, acknowledged a duplicate or incorrect catalog report, and stated that it would be reported for investigation.",
+          "evidence_excerpt": "We'll be sure to get this reported. Great detective work!",
+          "policy_influence": "Supports acknowledging concrete metadata evidence and passing the report to content operations without claiming an immediate correction."
+        }
+      ],
+      "source_metadata": {
+        "source_record_field": "ordered_messages",
+        "reconstruction_flags": [],
+        "sensitive_content_removed": true
+      }
+    },
+    {
+      "intent": "03_region_availability",
+      "template_identifier": "03_region_availability",
+      "representative_conversations": [
+        {
+          "conversation_id": "spotify_root_11178",
+          "observed_resolution_pattern": "Spotify stated that service availability depended on launch coverage in the customer's country and directed the customer to stay informed about future availability.",
+          "evidence_excerpt": "We haven't launched there yet, but hopefully we'll get there soon.",
+          "policy_influence": "Supports explaining regional availability without implying that support can override country or licensing restrictions."
+        }
+      ],
+      "source_metadata": {
+        "source_record_field": "ordered_messages",
+        "reconstruction_flags": [],
+        "sensitive_content_removed": true
+      }
+    },
+    {
+      "intent": "04_billing_payment",
+      "template_identifier": "04_billing_payment",
+      "representative_conversations": [
+        {
+          "conversation_id": "spotify_root_7011",
+          "observed_resolution_pattern": "For a repeated-charge report, Spotify requested a private account follow-up so the account and payment history could be checked.",
+          "evidence_excerpt": "Could you send us a DM with your account's email address? We'll take a look backstage.",
+          "policy_influence": "Supports directing account-specific billing investigations to a secure channel and acknowledging that duplicate charges require account review."
+        }
+      ],
+      "source_metadata": {
+        "source_record_field": "ordered_messages",
+        "reconstruction_flags": [],
+        "sensitive_content_removed": true
+      }
+    },
+    {
+      "intent": "05_subscription_plan_management",
+      "template_identifier": "05_subscription_plan_management",
+      "representative_conversations": [
+        {
+          "conversation_id": "spotify_root_492430",
+          "observed_resolution_pattern": "When asked about pausing a subscription, Spotify explained that the requested pause option was unavailable and described cancellation followed by later resubscription as the available account-management path.",
+          "evidence_excerpt": "You can cancel your subscription ... then resubscribe when you're ready.",
+          "policy_influence": "Supports giving a direct account-management path while clearly distinguishing available subscription actions from unsupported pause functionality.",
+          "redaction_note": "The intervening help URL was removed from the excerpt."
+        }
+      ],
+      "source_metadata": {
+        "source_record_field": "ordered_messages",
+        "reconstruction_flags": [],
+        "sensitive_content_removed": true
+      }
+    },
+    {
+      "intent": "06_login_authentication",
+      "template_identifier": "06_login_authentication",
+      "representative_conversations": [
+        {
+          "conversation_id": "spotify_root_8425",
+          "observed_resolution_pattern": "For a possible account-compromise report, Spotify provided security guidance and redirected sensitive account details away from the public thread into a private channel.",
+          "evidence_excerpt": "We'd recommend deleting your last tweet as it contains sensitive account info. You can DM it to us instead.",
+          "policy_influence": "Supports combining account-recovery guidance with a secure-channel warning when authentication or compromise concerns are present."
+        }
+      ],
+      "source_metadata": {
+        "source_record_field": "ordered_messages",
+        "reconstruction_flags": [],
+        "sensitive_content_removed": true
+      }
+    },
+    {
+      "intent": "07_technical_malfunction",
+      "template_identifier": "07_technical_malfunction_individual",
+      "representative_conversations": [
+        {
+          "conversation_id": "spotify_root_855",
+          "observed_resolution_pattern": "For an individual playback-control malfunction, Spotify asked for device context, suggested restarting the device, and escalated to a private follow-up after the first troubleshooting step did not resolve the issue.",
+          "evidence_excerpt": "Can you try restarting your device ... Keep us posted.",
+          "policy_influence": "Supports a progressive troubleshooting sequence: restart, gather device details, and move account-specific investigation to a private channel.",
+          "redaction_note": "The device-button details were shortened from the original excerpt."
+        }
+      ],
+      "source_metadata": {
+        "source_record_field": "ordered_messages",
+        "reconstruction_flags": [],
+        "sensitive_content_removed": true
+      }
+    },
+    {
+      "intent": "08_feature_request",
+      "template_identifier": "08_feature_request",
+      "representative_conversations": [
+        {
+          "conversation_id": "spotify_root_3896",
+          "observed_resolution_pattern": "For a requested product capability, Spotify acknowledged the idea and directed the customer to the Community for suggestion and user support.",
+          "evidence_excerpt": "This sounds like a great idea! Suggest it in our Community and get support from other users.",
+          "policy_influence": "Supports acknowledging feature feedback and directing requests to the established ideas channel rather than promising implementation."
+        }
+      ],
+      "source_metadata": {
+        "source_record_field": "ordered_messages",
+        "reconstruction_flags": [],
+        "sensitive_content_removed": true
+      }
+    },
+    {
+      "intent": "09_artist_rights_holder_mgmt",
+      "template_identifier": "09_artist_rights_holder_mgmt",
+      "representative_conversations": [
+        {
+          "conversation_id": "spotify_root_623005",
+          "observed_resolution_pattern": "For an artist-profile management question, Spotify directed the customer to Spotify for Artists for the relevant profile change instructions.",
+          "evidence_excerpt": "You can change your image at any time with Spotify for Artists.",
+          "policy_influence": "Supports directing creator and rights-holder workflows to the dedicated Spotify for Artists channel rather than handling them as ordinary listener support."
+        }
+      ],
+      "source_metadata": {
+        "source_record_field": "ordered_messages",
+        "reconstruction_flags": [],
+        "sensitive_content_removed": true
+      }
+    }
+  ]
+}

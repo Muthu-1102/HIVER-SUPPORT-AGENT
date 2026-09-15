@@ -39,7 +39,7 @@ To guarantee mathematical reproducibility across operating systems, Python runti
 
 ## 4. Stratified Design & Quota Allocation
 
-The sampling plan allocates exactly 200 slots across 24 distinct strata covering substantive intents, non-intent classes, cross-cutting flags, boundary pairs, escalation scenarios, compound intents, and structural audit risks:
+The sampling plan allocates exactly 200 slots across 24 distinct strata covering substantive intents, intended non-intent classes, cross-cutting flags, boundary pairs, escalation scenarios, compound intents, and structural audit risks. The quota below is the design target; the frozen annotated result does not contain a canonical `no_action_acknowledgment_only` example.
 
 | Stratum Category | Stratum Identifier | Target Quota | Heuristic Description & Inclusion Criteria |
 |---|---|---|---|
@@ -69,6 +69,10 @@ The sampling plan allocates exactly 200 slots across 24 distinct strata covering
 | **Structural Audit (6)** | `structural_risk_audit` | 6 | Inbound agent signatures (`^XX`) or consecutive multi-author inbound messages. |
 | **Unstratified Control (14)** | `unstratified_control` | 14 | Lowest-hash candidate threads from full corpus without topical pre-filtering. |
 | **Total Candidates** | | **200** | Exactly 200 unique conversation threads. |
+
+### Final Non-Intent Coverage Status
+
+The final canonical gold set contains **200 records**. The represented non-intent classes remain valid: `insufficient_information` has 11 canonical examples and `out_of_scope_non_support` has 1. `no_action_acknowledgment_only` has **0 canonical examples**. Raw-corpus acknowledgment-only examples were identified during audit, but they were outside the frozen candidate/annotation pipeline and were not added or relabelled. Adding them properly would require a fresh annotation/adjudication round. No accuracy claim is made for `no_action_acknowledgment_only` specifically.
 
 ---
 
